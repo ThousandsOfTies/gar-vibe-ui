@@ -140,7 +140,8 @@ export function getVirtualRemoteHtml(
   }
 
   function renderState(s) {
-    document.getElementById('chatTxt').textContent = 'chat: ' + s.chat;
+    const chatLabel = s.chat === 'idle' ? 'quiet?' : s.chat;
+    document.getElementById('chatTxt').textContent = 'chat: ' + chatLabel;
     document.getElementById('chatDot').className = 'dot ' + s.chat;
     document.getElementById('micTxt').textContent = 'mic: ' + s.mic;
     setDot('micDot', 'on', s.mic === 'on');
@@ -150,7 +151,7 @@ export function getVirtualRemoteHtml(
     const a = s.activity || {};
     const header = s.chat === 'maybeWaiting'
       ? '<span class="needed">⚠ ACTION NEEDED (推定)</span>'
-      : (s.chat === 'working' ? '<span class="ok">▶ WORKING</span>' : '<span class="muted">… idle</span>');
+      : (s.chat === 'working' ? '<span class="ok">▶ WORKING</span>' : '<span class="muted">… quiet / unknown</span>');
     let cmdLine = '';
     if (a.command) {
       const running = (a.exitCode === undefined || a.exitCode === null);

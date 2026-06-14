@@ -127,6 +127,9 @@ export class StateMonitor implements vscode.Disposable {
    * - 直近に活動あり → working
    * - 活動が少し止まった → maybeWaiting（待ちかも）
    * - 長く止まった → idle
+   *
+   * 注意：Copilot/Chatパネル内の質問待ちは公式APIから見えないため、
+   * idle は「質問待ちではない」ではなく「観測可能な活動がない」という意味。
    */
   computeChatState(idleThresholdMs: number): ChatState {
     const activelyRunning =

@@ -36,7 +36,10 @@ export type ActionValue =
   | 'readAloud'  // 応答を読み上げ
   | 'stopRead';  // 読み上げ停止
 
-/** チャット/作業のざっくり状態（活動ヒューリスティック） */
+/**
+ * チャット/作業のざっくり状態（活動ヒューリスティック）。
+ * idle は「観測可能な活動がない」であり、Chatパネル内の入力待ちを否定しない。
+ */
 export type ChatState = 'working' | 'maybeWaiting' | 'idle';
 
 /** 拡張 → デバイス：状態通知（LED/画面/ロボ制御用） */

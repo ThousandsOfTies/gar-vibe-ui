@@ -8,6 +8,7 @@ This extension runs a local WebSocket server and translates remote-control butto
 - Token-protected WebSocket control channel.
 - Actions for OK, NG, submit, mic toggle, accept all, read aloud, and stop read-aloud.
 - State updates for activity, diagnostics, active file, tasks, debug sessions, and focus state.
+- `idle` means no observable VS Code activity; Copilot Chat input prompts are not exposed by stable APIs.
 
 ## Commands
 
