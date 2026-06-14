@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  vibe-remote:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vibe-remote
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vibe-remote/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Audit
+        run: npm audit --audit-level=high

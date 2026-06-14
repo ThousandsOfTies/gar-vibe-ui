@@ -1,5 +1,12 @@
 // デバイス/仮想リモコン と 拡張 の間でやり取りするメッセージ型。
 
+/** デバイス → 拡張：接続認証 */
+export interface HelloMessage {
+  type: 'hello';
+  /** 共有トークン。認証成功後に状態配信と操作を許可する。 */
+  token: string;
+}
+
 /** デバイス → 拡張：操作メッセージ */
 export interface ActionMessage {
   type: 'action';
@@ -12,10 +19,10 @@ export interface ActionMessage {
 /** デバイス → 拡張：疎通確認 */
 export interface PingMessage {
   type: 'ping';
-  token?: string;
+  token: string;
 }
 
-export type InboundMessage = ActionMessage | PingMessage;
+export type InboundMessage = HelloMessage | ActionMessage | PingMessage;
 
 /** 実行可能な操作の一覧 */
 export type ActionValue =

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
   dispatchAction,
@@ -31,6 +32,7 @@ export interface ServerOptions {
 export class RemoteServer implements vscode.Disposable {
   private wss?: WebSocketServer;
   private pollTimer?: NodeJS.Timeout;
+  private authenticatedSockets = new Set<WebSocket>();
   private micOn = false;
   private ttsOn = false;
   private lastStateJson = '';
@@ -55,8 +57,7 @@ export class RemoteServer implements vscode.Disposable {
       this.log(`接続: ${req.socket.remoteAddress}`);
       socket.on('message', (data) => this.handleMessage(socket, data.toString()));
       socket.on('error', (err) => this.log(`ソケットエラー: ${err.message}`));
-      // 接続直後に現在の状態を送る
-      this.sendState(socket, this.buildState());
+      socket.on('close', () => this.authenticatedSockets.delete(socket));
     });
 
     this.wss.on('error', (err) => {
@@ -88,15 +89,24 @@ export class RemoteServer implements vscode.Disposable {
     }
 
     if (msg.type === 'ping') {
+      if (!this.authenticate(socket, msg.token)) {
+        return;
+      }
+      this.sendState(socket, this.buildState());
+      return;
+    }
+
+    if (msg.type === 'hello') {
+      if (!this.authenticate(socket, msg.token)) {
+        return;
+      }
+      this.sendAck(socket, true);
       this.sendState(socket, this.buildState());
       return;
     }
 
     if (msg.type === 'action') {
-      // トークン照合（タイミング攻撃を避けるため固定比較でなくても、ここでは簡易照合）
-      if (msg.token !== this.opts.token) {
-        this.log('トークン不一致の操作を拒否');
-        this.sendAck(socket, false, msg.value, 'トークン不一致');
+      if (!this.authenticate(socket, msg.token, msg.value)) {
         return;
       }
 
@@ -132,6 +142,23 @@ export class RemoteServer implements vscode.Disposable {
     this.sendAck(socket, false, undefined, '未知のメッセージ種別');
   }
 
+  private authenticate(socket: WebSocket, token: string, value?: ActionValue): boolean {
+    if (this.isValidToken(token)) {
+      this.authenticatedSockets.add(socket);
+      return true;
+    }
+
+    this.log('トークン不一致のメッセージを拒否');
+    this.sendAck(socket, false, value, 'トークン不一致');
+    return false;
+  }
+
+  private isValidToken(token: string): boolean {
+    const expected = Buffer.from(this.opts.token);
+    const actual = Buffer.from(token || '');
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  }
+
   private buildState(): StateMessage {
     return {
       type: 'state',
@@ -155,7 +182,7 @@ export class RemoteServer implements vscode.Disposable {
     }
     this.lastStateJson = cmp;
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client.readyState === WebSocket.OPEN && this.authenticatedSockets.has(client)) {
         this.sendState(client, state);
       }
     }
@@ -196,6 +223,7 @@ export class RemoteServer implements vscode.Disposable {
       this.wss.close();
       this.wss = undefined;
     }
+    this.authenticatedSockets.clear();
   }
 }
 

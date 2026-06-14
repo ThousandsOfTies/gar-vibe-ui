@@ -106,7 +106,11 @@ export function getVirtualRemoteHtml(
 
   function connect() {
     ws = new WebSocket(WS_URL);
-    ws.onopen = () => { setConn('接続済み ' + WS_URL, true); log('接続しました'); };
+    ws.onopen = () => {
+      setConn('接続済み ' + WS_URL, true);
+      log('接続しました');
+      ws.send(JSON.stringify({ type:'hello', token:TOKEN }));
+    };
     ws.onclose = () => {
       setConn('切断 — 再接続します…', false);
       clearTimeout(reconnectTimer);

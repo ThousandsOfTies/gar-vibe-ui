@@ -67,6 +67,8 @@
   },
   "scripts": {
     "compile": "node esbuild.js",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run compile && npm run typecheck && npm audit --audit-level=high",
     "smoke:protocol": "node scripts/smoke-protocol.js",
     "watch": "node esbuild.js --watch",
     "vscode:prepublish": "npm run compile -- --production"

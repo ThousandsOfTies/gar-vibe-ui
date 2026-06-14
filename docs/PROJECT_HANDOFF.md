@@ -142,6 +142,7 @@ flowchart LR
 
 **デバイス → 拡張（操作）**
 ```jsonc
+{ "type":"hello",  "token":"…" }  // 接続認証。成功後にstate配信開始
 { "type":"action", "value":"ok",        "token":"…" }  // acceptTool
 { "type":"action", "value":"ng",        "token":"…" }  // skipTool
 { "type":"action", "value":"acceptAll", "token":"…" }  // 編集全受け入れ
@@ -169,7 +170,7 @@ flowchart LR
 ```
 
 - 変化時にpush（即応）＋ ポーリング間隔（既定1秒）でも再評価。
-- **全 action メッセージに共有トークンを必須化**。不一致は拒否。
+- **接続認証と全 action メッセージに共有トークンを必須化**。不一致は拒否。
 
 ---
 
@@ -177,7 +178,7 @@ flowchart LR
 
 WSサーバは「Copilotの操作を実行できる」高権限のため、必ず対策する（OWASP的観点）。
 
-- **共有トークン**：拡張起動時に生成し SecretStorage に保存。全操作に添付、不一致は拒否。ハードコード禁止。
+- **共有トークン**：拡張起動時に生成し SecretStorage に保存。接続認証と全操作に添付、不一致は拒否。ハードコード禁止。
 - **バインド範囲**：既定 `127.0.0.1`（仮想リモコン用）。実機接続時のみ `0.0.0.0`（LAN公開）。
 - **トークンはコードに埋め込まない**。設定／Secret経由で渡す。
 

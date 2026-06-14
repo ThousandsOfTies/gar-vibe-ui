@@ -21,6 +21,10 @@ if (Number.isNaN(port) || port <= 0) {
   fail(`Invalid port: ${port}`);
 }
 
+if (!token) {
+  fail('A token is required. Pass --token=... or VIBE_REMOTE_TOKEN=...');
+}
+
 const ws = new WebSocket(url);
 const timeout = setTimeout(() => {
   ws.close();
@@ -32,13 +36,10 @@ let sawAck = !action;
 
 ws.on('open', () => {
   console.log(`connected ${url}`);
+  ws.send(JSON.stringify({ type: 'hello', token }));
   ws.send(JSON.stringify({ type: 'ping', token }));
 
   if (action) {
-    if (!token) {
-      ws.close();
-      fail('An action requires --token=... or VIBE_REMOTE_TOKEN=...');
-    }
     ws.send(JSON.stringify({ type: 'action', value: action, token }));
   }
 });

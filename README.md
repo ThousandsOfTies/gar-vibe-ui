@@ -17,6 +17,7 @@ advertizement.png           Concept image
 
 - Core VS Code extension is implemented.
 - Virtual remote WebView is implemented.
+- The WebSocket state/action channel is token-protected.
 - ESP32/M5StickC firmware is not implemented yet.
 - F5/manual VS Code extension verification is still the next practical milestone.
 
@@ -33,6 +34,6 @@ npm run compile
 ## Next Steps
 
 1. Verify the extension with VS Code F5 and the virtual remote.
-2. Run the protocol smoke test against the F5 extension host.
+2. Run the token-authenticated protocol smoke test against the F5 extension host.
 3. Draft the ESP32/M5StickC firmware.
 4. Package the extension as a `.vsix`.

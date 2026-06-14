@@ -33,13 +33,13 @@ The compiled extension entrypoint is `dist/extension.js`.
 
 ## Protocol Smoke Test
 
-After starting the extension in VS Code, verify the WebSocket state channel:
+After starting the extension in VS Code, show the token with `Vibe Remote: 接続トークンを表示`, then verify the WebSocket state channel:
 
 ```bash
-npm run smoke:protocol
+npm run smoke:protocol -- --token=YOUR_TOKEN
 ```
 
-To verify an action, pass the token shown by `Vibe Remote: 接続トークンを表示`:
+To verify an action:
 
 ```bash
 npm run smoke:protocol -- --token=YOUR_TOKEN --action=ok
