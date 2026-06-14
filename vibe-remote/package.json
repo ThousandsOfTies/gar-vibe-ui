@@ -1,0 +1,84 @@
+{
+  "name": "vibe-remote",
+  "displayName": "Vibe Remote",
+  "description": "離れた場所から物理デバイス/仮想リモコンでAIコーディングを監督する。OK/NG・送信・マイク・読み上げをWebSocket経由で操作し、作業状態を配信します。",
+  "version": "0.1.0",
+  "publisher": "vibe",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vibeRemote.openVirtualRemote",
+        "title": "Vibe Remote: 仮想リモコンを開く"
+      },
+      {
+        "command": "vibeRemote.showToken",
+        "title": "Vibe Remote: 接続トークンを表示"
+      },
+      {
+        "command": "vibeRemote.restartServer",
+        "title": "Vibe Remote: サーバを再起動"
+      }
+    ],
+    "configuration": {
+      "title": "Vibe Remote",
+      "properties": {
+        "vibeRemote.port": {
+          "type": "number",
+          "default": 39271,
+          "description": "WebSocketサーバが待ち受けるポート番号。"
+        },
+        "vibeRemote.bindAddress": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "enum": [
+            "127.0.0.1",
+            "0.0.0.0"
+          ],
+          "enumDescriptions": [
+            "ローカルのみ（最も安全。仮想リモコン用）",
+            "LAN全体に公開（ESP32などの実機から接続する場合のみ。トークン必須）"
+          ],
+          "description": "WebSocketサーバのバインドアドレス。実機デバイスから接続する場合のみ 0.0.0.0 を選択してください。"
+        },
+        "vibeRemote.idleThresholdMs": {
+          "type": "number",
+          "default": 4000,
+          "description": "この時間（ミリ秒）活動が無いと「待ちかも(maybeWaiting)」と判定します。"
+        },
+        "vibeRemote.pollIntervalMs": {
+          "type": "number",
+          "default": 1000,
+          "description": "状態を再評価してデバイスへ配信する間隔（ミリ秒）。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "smoke:protocol": "node scripts/smoke-protocol.js",
+    "watch": "node esbuild.js --watch",
+    "vscode:prepublish": "npm run compile -- --production"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.10",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.5.0"
+  }
+}
