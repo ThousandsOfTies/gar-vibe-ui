@@ -1,7 +1,9 @@
 node_modules/
 dist/
+.tools/
 *.vsix
 .DS_Store
 
 vibe-remote/node_modules/
 vibe-remote/dist/
+vibe-remote/.tools/

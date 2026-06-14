@@ -31,6 +31,8 @@ npm run compile
 
 The compiled extension entrypoint is `dist/extension.js`.
 
+When using VS Code Remote WSL without a Linux Node.js install, the bundled VS Code tasks call `scripts/npm.sh`. It installs a local Linux Node.js under `.tools/` and avoids accidentally running the Windows npm shim from a `\\wsl.localhost` path.
+
 ## Protocol Smoke Test
 
 After starting the extension in VS Code, show the token with `Vibe Remote: 接続トークンを表示`, then verify the WebSocket state channel:

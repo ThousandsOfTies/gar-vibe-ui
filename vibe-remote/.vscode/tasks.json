@@ -3,15 +3,17 @@
   "tasks": [
     {
       "label": "npm: compile",
-      "type": "npm",
-      "script": "compile",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/npm.sh",
+      "args": ["run", "compile"],
       "problemMatcher": [],
       "group": "build"
     },
     {
       "label": "npm: watch",
-      "type": "npm",
-      "script": "watch",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/npm.sh",
+      "args": ["run", "watch"],
       "isBackground": true,
       "problemMatcher": [],
       "group": "build"
