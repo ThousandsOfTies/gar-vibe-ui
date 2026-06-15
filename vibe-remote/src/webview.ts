@@ -38,6 +38,7 @@ export function getVirtualRemoteHtml(
   .lcd .needed { color:var(--yellow); font-weight:700; }
   .lcd .ok { color:var(--green); }
   .lcd .bad { color:var(--red); }
+  .lcd .agent { color:var(--purple); font-weight:700; }
   .lcd .muted { color:var(--muted); }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   button {
@@ -149,9 +150,14 @@ export function getVirtualRemoteHtml(
     setDot('ttsDot', 'on', s.tts === 'on');
 
     const a = s.activity || {};
+    const agent = s.agent;
     const header = s.chat === 'maybeWaiting'
       ? '<span class="needed">⚠ ACTION NEEDED (推定)</span>'
       : (s.chat === 'working' ? '<span class="ok">▶ WORKING</span>' : '<span class="muted">… quiet / unknown</span>');
+    const agentLine = agent
+      ? '<span class="agent">agent ' + escapeHtml(agent.source || 'agent') + ': ' + escapeHtml(agent.status) + '</span>' +
+        (agent.message ? ' <span class="muted">' + escapeHtml(agent.message) + '</span>' : '')
+      : '<span class="muted">agent: no signal</span>';
     let cmdLine = '';
     if (a.command) {
       const running = (a.exitCode === undefined || a.exitCode === null);
@@ -169,7 +175,7 @@ export function getVirtualRemoteHtml(
     if (a.focused === false) extra.push('💤 unfocused');
 
     document.getElementById('lcd').innerHTML =
-      header + '<br>' + (cmdLine || '<span class="muted">no command</span>') + '<br>' + errLine + '<br>' + fileLine +
+      header + '<br>' + agentLine + '<br>' + (cmdLine || '<span class="muted">no command</span>') + '<br>' + errLine + '<br>' + fileLine +
       (extra.length ? '<br><span class="muted">' + extra.join('  ') + '</span>' : '');
   }
 

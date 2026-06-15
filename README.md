@@ -18,6 +18,7 @@ advertizement.png           Concept image
 - Core VS Code extension is implemented.
 - Virtual remote WebView is implemented.
 - The WebSocket state/action channel is token-protected.
+- MCP-capable agents can report status through the Vibe Remote MCP bridge.
 - ESP32/M5StickC firmware is not implemented yet.
 - F5/manual VS Code extension verification is still the next practical milestone.
 

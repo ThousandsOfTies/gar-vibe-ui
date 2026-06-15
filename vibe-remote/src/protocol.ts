@@ -22,7 +22,21 @@ export interface PingMessage {
   token: string;
 }
 
-export type InboundMessage = HelloMessage | ActionMessage | PingMessage;
+/** MCP/外部エージェント → 拡張：自己申告ステータス */
+export interface AgentStatusMessage {
+  type: 'agentStatus';
+  token: string;
+  status: AgentRuntimeStatus;
+  source?: string;
+  message?: string;
+  ttlMs?: number;
+}
+
+export type InboundMessage =
+  | HelloMessage
+  | ActionMessage
+  | PingMessage
+  | AgentStatusMessage;
 
 /** 実行可能な操作の一覧 */
 export type ActionValue =
@@ -42,12 +56,30 @@ export type ActionValue =
  */
 export type ChatState = 'working' | 'maybeWaiting' | 'idle';
 
+/** エージェント自己申告の実行状態 */
+export type AgentRuntimeStatus =
+  | 'running'
+  | 'waiting'
+  | 'done'
+  | 'failed'
+  | 'idle';
+
+export interface AgentStatusSnapshot {
+  source: string;
+  status: AgentRuntimeStatus;
+  message?: string;
+  updatedAt: number;
+  expiresAt?: number;
+}
+
 /** 拡張 → デバイス：状態通知（LED/画面/ロボ制御用） */
 export interface StateMessage {
   type: 'state';
   chat: ChatState;
   mic: 'on' | 'off';
   tts: 'on' | 'off';
+  /** MCP/外部エージェントから自己申告された状態 */
+  agent?: AgentStatusSnapshot;
   /** 直近に観測できた作業の実況（公式APIで取得） */
   activity: ActivitySnapshot;
   ts: number;

@@ -9,6 +9,7 @@ import {
 import { StateMonitor } from './stateMonitor';
 import type {
   ActionValue,
+  AgentStatusSnapshot,
   InboundMessage,
   OutboundMessage,
   StateMessage
@@ -33,6 +34,7 @@ export class RemoteServer implements vscode.Disposable {
   private wss?: WebSocketServer;
   private pollTimer?: NodeJS.Timeout;
   private authenticatedSockets = new Set<WebSocket>();
+  private agentStatus: AgentStatusSnapshot | undefined;
   private micOn = false;
   private ttsOn = false;
   private lastStateJson = '';
@@ -139,6 +141,32 @@ export class RemoteServer implements vscode.Disposable {
       return;
     }
 
+    if (msg.type === 'agentStatus') {
+      if (!this.authenticate(socket, msg.token)) {
+        return;
+      }
+      if (!isAgentStatus(msg.status)) {
+        this.sendAck(socket, false, undefined, `未知のagent status: ${msg.status}`);
+        return;
+      }
+
+      const now = Date.now();
+      const ttlMs = Number.isFinite(msg.ttlMs) && msg.ttlMs! > 0
+        ? Math.min(msg.ttlMs!, 30 * 60 * 1000)
+        : undefined;
+      this.agentStatus = {
+        source: msg.source?.trim() || 'agent',
+        status: msg.status,
+        message: msg.message?.trim() || undefined,
+        updatedAt: now,
+        expiresAt: ttlMs ? now + ttlMs : undefined
+      };
+      this.log(`agent ${this.agentStatus.source}: ${this.agentStatus.status}${this.agentStatus.message ? ` (${this.agentStatus.message})` : ''}`);
+      this.sendAck(socket, true);
+      this.broadcastStateIfChanged(true);
+      return;
+    }
+
     this.sendAck(socket, false, undefined, '未知のメッセージ種別');
   }
 
@@ -160,14 +188,23 @@ export class RemoteServer implements vscode.Disposable {
   }
 
   private buildState(): StateMessage {
+    const agent = this.getAgentStatus();
     return {
       type: 'state',
-      chat: this.monitor.computeChatState(this.opts.idleThresholdMs),
+      chat: agentToChatState(agent) ?? this.monitor.computeChatState(this.opts.idleThresholdMs),
       mic: this.micOn ? 'on' : 'off',
       tts: this.ttsOn ? 'on' : 'off',
+      agent,
       activity: this.monitor.getActivity(),
       ts: Date.now()
     };
+  }
+
+  private getAgentStatus(): AgentStatusSnapshot | undefined {
+    if (this.agentStatus?.expiresAt && this.agentStatus.expiresAt <= Date.now()) {
+      this.agentStatus = undefined;
+    }
+    return this.agentStatus;
   }
 
   private broadcastStateIfChanged(force = false): void {
@@ -225,6 +262,23 @@ export class RemoteServer implements vscode.Disposable {
     }
     this.authenticatedSockets.clear();
   }
+}
+
+function isAgentStatus(status: string): boolean {
+  return ['running', 'waiting', 'done', 'failed', 'idle'].includes(status);
+}
+
+function agentToChatState(agent: AgentStatusSnapshot | undefined): StateMessage['chat'] | undefined {
+  if (!agent) {
+    return undefined;
+  }
+  if (agent.status === 'running') {
+    return 'working';
+  }
+  if (agent.status === 'waiting') {
+    return 'maybeWaiting';
+  }
+  return undefined;
 }
 
 function maskToken(token: string): string {

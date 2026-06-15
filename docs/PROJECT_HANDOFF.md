@@ -209,6 +209,7 @@ vibe-remote/
 - WebSocketサーバ（既定 `127.0.0.1:39271`）＋ トークン認証（自動生成・SecretStorage保存）
 - 操作中継：OK / NG / 送信 / マイクON/OFF / 全受け入れ / 読み上げ / 停止 → すべて §4.1 の公式コマンドへ
 - 状態配信：1秒ポーリングで `working / maybeWaiting / idle` ＋ 実況（コマンド・終了コード・エラー数・編集ファイル・デバッグ/タスク状態）を配信
+- MCPステータスブリッジ：MCP対応エージェントが `vibe_remote_heartbeat` / `vibe_remote_request_decision` / `vibe_remote_set_status` で自己申告状態を書き込める
 - 仮想リモコン（WebView）：**デバイス到着前に全機能を検証できる**。LCD風の実況表示＋全ボタン付き
 - 設定：port / bindAddress / idleThresholdMs / pollIntervalMs
 

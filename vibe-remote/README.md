@@ -48,6 +48,33 @@ To verify an action:
 npm run smoke:protocol -- --token=YOUR_TOKEN --action=ok
 ```
 
+## MCP Status Bridge
+
+Vibe Remote includes a small stdio MCP server that lets an MCP-capable agent report its own status to the remote display.
+
+1. Start the VS Code extension and run `Vibe Remote: 接続トークンを表示`.
+2. Add an MCP server entry to Codex `config.toml`:
+
+```toml
+[mcp_servers.vibe_remote]
+command = "/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/node.sh"
+args = ["/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/mcp-server.js"]
+env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }
+```
+
+Available tools:
+
+- `vibe_remote_set_status`: set `running`, `waiting`, `done`, `failed`, or `idle`.
+- `vibe_remote_heartbeat`: refresh `running` while work continues.
+- `vibe_remote_request_decision`: show a human-decision prompt summary.
+- `vibe_remote_clear_status`: mark the agent as idle.
+
+Suggested agent instruction:
+
+```text
+While working, call vibe_remote_heartbeat every 60 seconds. Before asking the user for a decision, call vibe_remote_request_decision with a short summary and choices. On completion or failure, call vibe_remote_set_status.
+```
+
 ## Run In VS Code
 
 1. Open the `vibe-remote` folder in VS Code.
