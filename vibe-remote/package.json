@@ -1,7 +1,7 @@
 {
   "name": "vibe-remote",
   "displayName": "Vibe Remote",
-  "description": "離れた場所から物理デバイス/仮想リモコンでAIコーディングを監督する。OK/NG・送信・マイク・読み上げをWebSocket経由で操作し、作業状態を配信します。",
+  "description": "MCP対応エージェントが自己申告した作業状態を、トークン保護されたWebSocketとVS Code内ビューで表示します。",
   "version": "0.1.0",
   "publisher": "vibe",
   "private": true,
@@ -20,7 +20,7 @@
     "commands": [
       {
         "command": "vibeRemote.openVirtualRemote",
-        "title": "Vibe Remote: 仮想リモコンを開く"
+        "title": "Vibe Remote: 状態ビューアを開く"
       },
       {
         "command": "vibeRemote.showToken",
@@ -37,7 +37,7 @@
         "vibeRemote.port": {
           "type": "number",
           "default": 39271,
-          "description": "WebSocketサーバが待ち受けるポート番号。"
+          "description": "状態ブリッジ用WebSocketサーバが待ち受けるポート番号。"
         },
         "vibeRemote.bindAddress": {
           "type": "string",
@@ -47,7 +47,7 @@
             "0.0.0.0"
           ],
           "enumDescriptions": [
-            "ローカルのみ（最も安全。仮想リモコン用）",
+            "ローカルのみ（最も安全）",
             "LAN全体に公開（ESP32などの実機から接続する場合のみ。トークン必須）"
           ],
           "description": "WebSocketサーバのバインドアドレス。実機デバイスから接続する場合のみ 0.0.0.0 を選択してください。"
@@ -60,7 +60,7 @@
         "vibeRemote.pollIntervalMs": {
           "type": "number",
           "default": 1000,
-          "description": "状態を再評価してデバイスへ配信する間隔（ミリ秒）。"
+          "description": "状態を再評価してビューアへ配信する間隔（ミリ秒）。"
         }
       }
     }

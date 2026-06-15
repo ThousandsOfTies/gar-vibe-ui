@@ -1,9 +1,8 @@
 /**
- * 仮想リモコンのWebView HTMLを生成する。
- * ローカルWebSocketサーバに接続し、ボタン操作の送信と状態表示を行う。
- * デバイス（ESP32）が届く前から全機能を検証できる。
+ * 状態ビューアのWebView HTMLを生成する。
+ * ローカルWebSocketサーバに接続し、MCP/外部エージェントから届いた状態を表示する。
  */
-export function getVirtualRemoteHtml(
+export function getStatusViewerHtml(
   host: string,
   port: number,
   token: string
@@ -40,7 +39,6 @@ export function getVirtualRemoteHtml(
   .lcd .bad { color:var(--red); }
   .lcd .agent { color:var(--purple); font-weight:700; }
   .lcd .muted { color:var(--muted); }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   button {
     border:2px solid var(--line); background:var(--panel); color:var(--txt);
     border-radius:12px; padding:14px; font-size:15px; font-weight:700; cursor:pointer;
@@ -48,41 +46,25 @@ export function getVirtualRemoteHtml(
   }
   button:active { transform:scale(.96); }
   button .sub { display:block; font-size:11px; font-weight:400; color:var(--muted); margin-top:3px; }
-  .b-ok { border-color:var(--green); } .b-ok:hover { background:rgba(63,185,80,.12); }
-  .b-ng { border-color:var(--red); } .b-ng:hover { background:rgba(248,81,73,.12); }
-  .b-submit { border-color:var(--blue); } .b-submit:hover { background:rgba(88,166,255,.12); }
-  .b-mic { border-color:var(--purple); } .b-mic:hover { background:rgba(188,140,255,.12); }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .row { display:grid; grid-template-columns:1fr; gap:10px; margin-top:10px; }
   .small { padding:10px; font-size:13px; }
   .log { margin-top:14px; font-size:11px; color:var(--muted); max-height:120px; overflow:auto; border-top:1px solid var(--line); padding-top:8px; }
   .conn { font-size:11px; color:var(--muted); margin-bottom:10px; }
 </style>
 </head>
 <body>
-  <h2>📟 Vibe Remote — 仮想リモコン</h2>
+  <h2>Vibe Remote — 状態ビューア</h2>
   <div class="conn" id="conn">接続中… ${wsUrl}</div>
 
   <div class="status">
     <span class="chip"><span class="dot" id="chatDot"></span><span id="chatTxt">chat: ?</span></span>
-    <span class="chip"><span class="dot" id="micDot"></span><span id="micTxt">mic: ?</span></span>
-    <span class="chip"><span class="dot" id="ttsDot"></span><span id="ttsTxt">tts: ?</span></span>
+    <span class="chip"><span class="dot" id="agentDot"></span><span id="agentTxt">agent: ?</span></span>
   </div>
 
   <div class="lcd" id="lcd"><span class="muted">状態を待っています…</span></div>
 
-  <div class="grid">
-    <button class="b-ok" data-action="ok">✓ OK<span class="sub">承認 acceptTool</span></button>
-    <button class="b-ng" data-action="ng">✗ NG<span class="sub">スキップ skipTool</span></button>
-    <button class="b-submit" data-action="submit">⏎ 送信<span class="sub">submit</span></button>
-    <button class="b-mic" data-action="micToggle">🎤 マイク<span class="sub">ON/OFF</span></button>
-  </div>
   <div class="row">
-    <button class="small" data-action="acceptAll">📦 全受け入れ</button>
-    <button class="small" data-action="readAloud">🔊 読み上げ</button>
-  </div>
-  <div class="row">
-    <button class="small" data-action="stopRead">🔇 読み上げ停止</button>
-    <button class="small" data-action="ping">🔄 状態取得</button>
+    <button class="small" data-action="ping">状態取得</button>
   </div>
 
   <div class="log" id="log"></div>
@@ -123,7 +105,7 @@ export function getVirtualRemoteHtml(
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (msg.type === 'state') { renderState(msg); }
       else if (msg.type === 'ack') {
-        log('ack: ' + (msg.ok ? 'OK ' : 'NG ') + (msg.value || '') + (msg.error ? ' (' + msg.error + ')' : ''));
+        log('ack: ' + (msg.ok ? 'OK' : 'NG') + (msg.error ? ' (' + msg.error + ')' : ''));
       }
     };
   }
@@ -131,8 +113,7 @@ export function getVirtualRemoteHtml(
   function send(action) {
     if (!ws || ws.readyState !== WebSocket.OPEN) { log('未接続のため送信できません'); return; }
     if (action === 'ping') { ws.send(JSON.stringify({ type:'ping', token:TOKEN })); return; }
-    ws.send(JSON.stringify({ type:'action', value:action, token:TOKEN }));
-    log('送信: ' + action);
+    log('未対応の操作です: ' + action);
   }
 
   function setDot(id, cls, on) {
@@ -144,16 +125,14 @@ export function getVirtualRemoteHtml(
     const chatLabel = s.chat === 'idle' ? 'quiet?' : s.chat;
     document.getElementById('chatTxt').textContent = 'chat: ' + chatLabel;
     document.getElementById('chatDot').className = 'dot ' + s.chat;
-    document.getElementById('micTxt').textContent = 'mic: ' + s.mic;
-    setDot('micDot', 'on', s.mic === 'on');
-    document.getElementById('ttsTxt').textContent = 'tts: ' + s.tts;
-    setDot('ttsDot', 'on', s.tts === 'on');
 
     const a = s.activity || {};
     const agent = s.agent;
+    document.getElementById('agentTxt').textContent = agent ? 'agent: ' + agent.status : 'agent: no signal';
+    setDot('agentDot', 'on', !!agent && (agent.status === 'running' || agent.status === 'waiting'));
     const header = s.chat === 'maybeWaiting'
-      ? '<span class="needed">⚠ ACTION NEEDED (推定)</span>'
-      : (s.chat === 'working' ? '<span class="ok">▶ WORKING</span>' : '<span class="muted">… quiet / unknown</span>');
+      ? '<span class="needed">WAITING (agent reported)</span>'
+      : (s.chat === 'working' ? '<span class="ok">WORKING</span>' : '<span class="muted">quiet / unknown</span>');
     const agentLine = agent
       ? '<span class="agent">agent ' + escapeHtml(agent.source || 'agent') + ': ' + escapeHtml(agent.status) + '</span>' +
         (agent.message ? ' <span class="muted">' + escapeHtml(agent.message) + '</span>' : '')
@@ -170,9 +149,9 @@ export function getVirtualRemoteHtml(
       : '<span class="muted">no diagnostics</span>';
     const fileLine = a.file ? '📄 ' + escapeHtml(a.file) : '<span class="muted">no file</span>';
     const extra = [];
-    if (a.debugging) extra.push('🐞 debug');
-    if (a.taskRunning) extra.push('▶ task');
-    if (a.focused === false) extra.push('💤 unfocused');
+    if (a.debugging) extra.push('debug');
+    if (a.taskRunning) extra.push('task');
+    if (a.focused === false) extra.push('unfocused');
 
     document.getElementById('lcd').innerHTML =
       header + '<br>' + agentLine + '<br>' + (cmdLine || '<span class="muted">no command</span>') + '<br>' + errLine + '<br>' + fileLine +

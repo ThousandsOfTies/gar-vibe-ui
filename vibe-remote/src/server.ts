@@ -1,14 +1,8 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
-import {
-  dispatchAction,
-  isMicStartAction,
-  isMicStopAction
-} from './commands';
 import { StateMonitor } from './stateMonitor';
 import type {
-  ActionValue,
   AgentStatusSnapshot,
   InboundMessage,
   OutboundMessage,
@@ -25,18 +19,16 @@ export interface ServerOptions {
 
 /**
  * ローカルWebSocketサーバ。
- * - デバイス/仮想リモコンからの操作を受けて公式コマンドを実行
- * - 作業状態を定期配信（LED/画面/ロボ制御用）
+ * - MCP/外部エージェントからの自己申告ステータスを受け取る
+ * - 作業状態を状態ビューアへ定期配信する
  *
- * セキュリティ：全 action メッセージに共有トークンを必須化し、不一致は拒否する。
+ * セキュリティ：全メッセージに共有トークンを必須化し、不一致は拒否する。
  */
 export class RemoteServer implements vscode.Disposable {
   private wss?: WebSocketServer;
   private pollTimer?: NodeJS.Timeout;
   private authenticatedSockets = new Set<WebSocket>();
   private agentStatus: AgentStatusSnapshot | undefined;
-  private micOn = false;
-  private ttsOn = false;
   private lastStateJson = '';
 
   private readonly output: vscode.OutputChannel;
@@ -86,7 +78,7 @@ export class RemoteServer implements vscode.Disposable {
     try {
       msg = JSON.parse(raw) as InboundMessage;
     } catch {
-      this.sendAck(socket, false, undefined, 'JSON解析エラー');
+      this.sendAck(socket, false, 'JSON解析エラー');
       return;
     }
 
@@ -107,46 +99,12 @@ export class RemoteServer implements vscode.Disposable {
       return;
     }
 
-    if (msg.type === 'action') {
-      if (!this.authenticate(socket, msg.token, msg.value)) {
-        return;
-      }
-
-      // マイク状態の更新（実体を観測できないため送信内容から推定）
-      const willStartMic = isMicStartAction(msg.value, this.micOn);
-      const willStopMic = isMicStopAction(msg.value, this.micOn);
-      if (msg.value === 'readAloud') {
-        this.ttsOn = true;
-      } else if (msg.value === 'stopRead') {
-        this.ttsOn = false;
-      }
-
-      dispatchAction(msg.value, () => this.micOn)
-        .then((commandId) => {
-          if (willStartMic) {
-            this.micOn = true;
-          }
-          if (willStopMic) {
-            this.micOn = false;
-          }
-          this.log(`操作 ${msg.value} → ${commandId}`);
-          this.sendAck(socket, true, msg.value);
-          // 状態が変わった可能性が高いので即配信
-          this.broadcastStateIfChanged(true);
-        })
-        .catch((err: Error) => {
-          this.log(`操作失敗 ${msg.value}: ${err.message}`);
-          this.sendAck(socket, false, msg.value, err.message);
-        });
-      return;
-    }
-
     if (msg.type === 'agentStatus') {
       if (!this.authenticate(socket, msg.token)) {
         return;
       }
       if (!isAgentStatus(msg.status)) {
-        this.sendAck(socket, false, undefined, `未知のagent status: ${msg.status}`);
+        this.sendAck(socket, false, `未知のagent status: ${msg.status}`);
         return;
       }
 
@@ -167,17 +125,17 @@ export class RemoteServer implements vscode.Disposable {
       return;
     }
 
-    this.sendAck(socket, false, undefined, '未知のメッセージ種別');
+    this.sendAck(socket, false, '未知のメッセージ種別');
   }
 
-  private authenticate(socket: WebSocket, token: string, value?: ActionValue): boolean {
+  private authenticate(socket: WebSocket, token: string): boolean {
     if (this.isValidToken(token)) {
       this.authenticatedSockets.add(socket);
       return true;
     }
 
     this.log('トークン不一致のメッセージを拒否');
-    this.sendAck(socket, false, value, 'トークン不一致');
+    this.sendAck(socket, false, 'トークン不一致');
     return false;
   }
 
@@ -192,8 +150,6 @@ export class RemoteServer implements vscode.Disposable {
     return {
       type: 'state',
       chat: agentToChatState(agent) ?? this.monitor.computeChatState(this.opts.idleThresholdMs),
-      mic: this.micOn ? 'on' : 'off',
-      tts: this.ttsOn ? 'on' : 'off',
       agent,
       activity: this.monitor.getActivity(),
       ts: Date.now()
@@ -229,13 +185,8 @@ export class RemoteServer implements vscode.Disposable {
     this.send(socket, state);
   }
 
-  private sendAck(
-    socket: WebSocket,
-    ok: boolean,
-    value?: ActionValue,
-    error?: string
-  ): void {
-    this.send(socket, { type: 'ack', ok, value, error });
+  private sendAck(socket: WebSocket, ok: boolean, error?: string): void {
+    this.send(socket, { type: 'ack', ok, error });
   }
 
   private send(socket: WebSocket, msg: OutboundMessage): void {

@@ -1,26 +1,23 @@
 # gar-vibe-ui
 
-Vibe Remote is a companion UI for supervising AI coding from away from the keyboard. It provides a VS Code extension that exposes a small WebSocket remote control for OK/NG, submit, mic toggle, and read-aloud actions, plus a built-in virtual remote for testing without hardware.
+Vibe Remote is a small status bridge for AI coding sessions. MCP-capable agents can report whether they are running, waiting, done, failed, or idle, and the VS Code-side viewer displays that state alongside observable editor activity.
 
 ## Layout
 
 ```text
 docs/
-  PROJECT_HANDOFF.md        Project context and design notes
-  vibe-remote-concept.html  Visual concept document
+  PROJECT_HANDOFF.md        Project context and current design notes
 vibe-remote/
-  VS Code extension source
-advertizement.png           Concept image
+  VS Code status bridge and MCP helper source
 ```
 
 ## Current Status
 
-- Core VS Code extension is implemented.
-- Virtual remote WebView is implemented.
-- The WebSocket state/action channel is token-protected.
-- MCP-capable agents can report status through the Vibe Remote MCP bridge.
-- ESP32/M5StickC firmware is not implemented yet.
-- F5/manual VS Code extension verification is still the next practical milestone.
+- MCP status bridge is implemented.
+- Token-protected WebSocket status channel is implemented.
+- VS Code status viewer is implemented.
+- The earlier VS Code command-control direction has been removed.
+- Hardware/physical remote work is deferred until there is a plugin-side cooperation model.
 
 ## Build
 
@@ -34,7 +31,6 @@ npm run compile
 
 ## Next Steps
 
-1. Verify the extension with VS Code F5 and the virtual remote.
-2. Run the token-authenticated protocol smoke test against the F5 extension host.
-3. Draft the ESP32/M5StickC firmware.
-4. Package the extension as a `.vsix`.
+1. Configure the MCP bridge in the agent runtime.
+2. Verify status reporting against the VS Code status viewer.
+3. Decide whether the next UI should stay in VS Code or move to a standalone app.

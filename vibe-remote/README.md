@@ -1,18 +1,18 @@
-# Vibe Remote VS Code Extension
+# Vibe Remote Status Bridge
 
-This extension runs a local WebSocket server and translates remote-control button events into stable VS Code commands for supervising AI coding.
+This package runs a local status bridge. MCP-capable agents report their own state to a token-protected WebSocket server, and the VS Code view displays that state alongside observable editor activity.
 
 ## Features
 
-- Virtual remote WebView for local testing.
-- Token-protected WebSocket control channel.
-- Actions for OK, NG, submit, mic toggle, accept all, read aloud, and stop read-aloud.
+- VS Code status viewer for local testing.
+- Token-protected WebSocket status channel.
+- MCP stdio server for agent status reports.
 - State updates for activity, diagnostics, active file, tasks, debug sessions, and focus state.
-- `idle` means no observable VS Code activity; Copilot Chat input prompts are not exposed by stable APIs.
+- `idle` means no observable VS Code activity; chat/agent prompts are not exposed by stable VS Code APIs unless the agent reports them.
 
 ## Commands
 
-- `Vibe Remote: 仮想リモコンを開く`
+- `Vibe Remote: 状態ビューアを開く`
 - `Vibe Remote: 接続トークンを表示`
 - `Vibe Remote: サーバを再起動`
 
@@ -42,10 +42,10 @@ After starting the extension in VS Code, show the token with `Vibe Remote: 接�
 npm run smoke:protocol -- --token=YOUR_TOKEN
 ```
 
-To verify an action:
+To verify an agent status update:
 
 ```bash
-npm run smoke:protocol -- --token=YOUR_TOKEN --action=ok
+npm run smoke:protocol -- --token=YOUR_TOKEN --status=running
 ```
 
 ## MCP Status Bridge
@@ -79,5 +79,5 @@ While working, call vibe_remote_heartbeat every 60 seconds. Before asking the us
 
 1. Open the `vibe-remote` folder in VS Code.
 2. Press F5 to start an Extension Development Host.
-3. Run `Vibe Remote: 仮想リモコンを開く` from the command palette.
-4. Use the virtual buttons to verify WebSocket actions and state updates.
+3. Run `Vibe Remote: 状態ビューアを開く` from the command palette.
+4. Use the MCP bridge or smoke script to verify status updates.

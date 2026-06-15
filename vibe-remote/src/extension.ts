@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { RemoteServer, ServerOptions } from './server';
 import { StateMonitor } from './stateMonitor';
-import { getVirtualRemoteHtml } from './webview';
+import { getStatusViewerHtml } from './webview';
 
 const TOKEN_KEY = 'vibeRemote.token';
 
@@ -28,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   statusBar.command = 'vibeRemote.openVirtualRemote';
   statusBar.text = '$(broadcast) Vibe';
-  statusBar.tooltip = 'Vibe Remote: クリックで仮想リモコンを開く';
+  statusBar.tooltip = 'Vibe Remote: クリックで状態ビューアを開く';
   statusBar.show();
   context.subscriptions.push(statusBar);
 
@@ -98,11 +98,11 @@ function openVirtualRemote(
   const opts = readOptions(token);
   const panel = vscode.window.createWebviewPanel(
     'vibeRemote.virtualRemote',
-    'Vibe Remote（仮想リモコン）',
+    'Vibe Remote（状態ビューア）',
     vscode.ViewColumn.Beside,
     { enableScripts: true, retainContextWhenHidden: true }
   );
-  // 仮想リモコンはローカル接続するため、host が 0.0.0.0 でも 127.0.0.1 へ繋ぐ
+  // 状態ビューアはローカル接続するため、host が 0.0.0.0 でも 127.0.0.1 へ繋ぐ
   const wsHost = opts.host === '0.0.0.0' ? '127.0.0.1' : opts.host;
-  panel.webview.html = getVirtualRemoteHtml(wsHost, opts.port, token);
+  panel.webview.html = getStatusViewerHtml(wsHost, opts.port, token);
 }
