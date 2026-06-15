@@ -34,7 +34,11 @@ The viable direction is cooperation from the agent side:
 - VS Code command-control dispatch for OK/NG/submit/mic/read-aloud.
 - The action message protocol.
 - Debug command dumping.
-- The old visual concept document and generated advertisement image, because they described the removed physical remote-control direction.
+- VS Code command-control claims in the promotional material.
+
+## Promotional Material
+
+`docs/vibe-remote-concept.html` is kept as a UX/concept document. The current version preserves the remote-supervision experience, but describes the implementation as MCP/agent cooperation instead of VS Code command-control. `advertizement.png` is restored as a temporary visual and can be regenerated later.
 
 ## Protocol
 

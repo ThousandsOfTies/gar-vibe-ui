@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vibe Remote — Concept & Spec</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2330; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --accent:#4ea1ff; --green:#3fb950;
+    --red:#f85149; --yellow:#e3b341; --blue:#58a6ff; --purple:#bc8cff;
+    --radius:14px;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0;
+    font-family:"Segoe UI","Yu Gothic UI","Hiragino Kaku Gothic ProN",sans-serif;
+    background:radial-gradient(1200px 600px at 70% -10%, #1b2740 0%, var(--bg) 55%);
+    color:var(--txt);
+    line-height:1.7;
+  }
+  .wrap { max-width:1080px; margin:0 auto; padding:48px 24px 96px; }
+  header.hero { text-align:center; padding:40px 0 24px; }
+  .badge {
+    display:inline-block; font-size:12px; letter-spacing:.18em; color:var(--accent);
+    border:1px solid var(--line); border-radius:999px; padding:6px 16px;
+    background:rgba(78,161,255,.08); text-transform:uppercase;
+  }
+  h1 {
+    font-size:clamp(32px,5vw,52px); margin:18px 0 8px;
+    background:linear-gradient(90deg,#8fd0ff,#bc8cff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  h2 { font-size:26px; margin:56px 0 18px; padding-left:14px; border-left:4px solid var(--accent); }
+  h3 { font-size:18px; margin:28px 0 10px; color:#d6e2ee; }
+  p { color:#cdd7e1; }
+  code {
+    font-family:"Cascadia Code","Consolas",monospace; background:#0b0f14;
+    border:1px solid var(--line); padding:2px 7px; border-radius:6px; font-size:13px; color:#ffd9a0;
+  }
+  pre {
+    background:#0b0f14; border:1px solid var(--line); border-radius:10px;
+    padding:16px; overflow:auto; font-size:13px; color:#c9d6e2;
+  }
+  table { width:100%; border-collapse:collapse; margin:8px 0; font-size:14px; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; letter-spacing:.05em; text-transform:uppercase; }
+  .tagline { color:var(--muted); font-size:18px; max-width:720px; margin:0 auto; }
+  .hero-shot { margin:32px auto 8px; max-width:960px; position:relative; }
+  .hero-shot img {
+    width:100%; height:auto; border-radius:20px; border:1px solid var(--line);
+    box-shadow:0 24px 70px -20px rgba(0,0,0,.8),0 0 0 1px rgba(120,160,255,.05);
+    display:block;
+  }
+  .hero-shot-caption { margin-top:12px; font-size:13px; color:var(--muted); }
+  .grid { display:grid; gap:18px; }
+  .cols-2 { grid-template-columns:repeat(2,1fr); }
+  .cols-3 { grid-template-columns:repeat(3,1fr); }
+  @media (max-width:760px){ .cols-2,.cols-3 { grid-template-columns:1fr; } }
+  .card {
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); border-radius:var(--radius); padding:22px;
+  }
+  .card h3 { margin-top:0; }
+  .pill {
+    display:inline-block; font-size:12px; padding:3px 10px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); margin-right:6px;
+  }
+  .kpis { display:flex; gap:28px; justify-content:center; flex-wrap:wrap; margin:28px 0 8px; }
+  .kpi { text-align:center; }
+  .kpi b { display:block; font-size:30px; color:#fff; }
+  .kpi span { color:var(--muted); font-size:13px; }
+  .note { border-left:3px solid var(--yellow); background:rgba(227,179,65,.07); padding:12px 16px; border-radius:0 10px 10px 0; }
+  .note.good { border-color:var(--green); background:rgba(63,185,80,.07); }
+  .note.bad { border-color:var(--red); background:rgba(248,81,73,.07); }
+  .mermaid { background:#0b0f14; border:1px solid var(--line); border-radius:12px; padding:18px; text-align:center; }
+  .ok { color:var(--green); font-weight:700; }
+  .warn { color:var(--yellow); font-weight:700; }
+  .no { color:var(--red); font-weight:700; }
+  .muted { color:var(--muted); }
+  .led { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:7px; vertical-align:middle; box-shadow:0 0 8px currentColor; }
+  .led.g{ background:var(--green); color:var(--green); }
+  .led.r{ background:var(--red); color:var(--red); }
+  .led.y{ background:var(--yellow); color:var(--yellow); }
+  .led.b{ background:var(--blue); color:var(--blue); }
+  .step { display:flex; gap:14px; align-items:flex-start; margin:12px 0; }
+  .step .n {
+    flex:0 0 34px; height:34px; border-radius:50%; display:grid; place-items:center;
+    background:rgba(78,161,255,.14); border:1px solid var(--line); color:var(--accent); font-weight:700;
+  }
+  footer { text-align:center; color:var(--muted); margin-top:64px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">Concept &amp; Spec v0.2</span>
+    <h1>Vibe Remote</h1>
+    <p class="tagline">
+      PCの前に座らなくても、Vibeを止めない。AIエージェントの状態と承認待ちを、手元の小さなリモコンへ。
+    </p>
+    <div class="hero-shot">
+      <img src="../advertizement.png" alt="Vibe Remote の製品コンセプト画像" />
+      <div class="hero-shot-caption">旧コンセプト画像を仮置き。内部技術はMCP/エージェント協調方式へ更新済み。</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><b>State</b><span>作業中・待機中</span></div>
+      <div class="kpi"><b>OK / NG</b><span>承認・却下</span></div>
+      <div class="kpi"><b>Prompt</b><span>選択肢表示</span></div>
+      <div class="kpi"><b>Notify</b><span>離席中の通知</span></div>
+    </div>
+  </header>
+
+  <h2>1. ビジョン</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>解きたい課題</h3>
+      <p>AIエージェントは作業の途中で、人間の判断を必要とする。PCの前へ戻って確認するだけの時間は、思ったより流れを止める。</p>
+      <p>本質的に必要なのは、状態を知ること、承認すること、却下すること、短い追加指示を返すこと。</p>
+    </div>
+    <div class="card">
+      <h3>体験の理想形</h3>
+      <p>ソファや別作業中でも、手元の小さなデバイスで <span class="ok">OK</span> / <span class="no">NG</span> を返す。</p>
+      <p>画面には「何を待っているか」「どの選択肢があるか」「作業は進行中か」が簡潔に出る。</p>
+    </div>
+  </div>
+  <div class="note good" style="margin-top:18px">
+    <strong>UXは維持。</strong> 変わったのは実装方式です。VS Codeの他プラグインを外側から押すのではなく、対応エージェントがMCP/ブリッジへ状態と承認要求を自己申告します。
+  </div>
+
+  <h2>2. システム全体像</h2>
+  <div class="mermaid">
+flowchart LR
+    subgraph AGENT["AI Agent / Runtime"]
+      WORK["作業状態"]
+      ASK["承認要求・選択肢"]
+    end
+    AGENT -->|"MCP tools"| MCP["Vibe Remote MCP Bridge"]
+    MCP -->|"WebSocket + token"| HUB["Vibe Remote Status Hub"]
+    HUB -->|"state stream"| VIEW["VS Code 状態ビューア"]
+    HUB -->|"state stream"| DEV["ESP32 / M5StickC Remote"]
+    DEV -.->|"future: decision response"| HUB
+    HUB -.->|"future: response bridge"| AGENT
+  </div>
+  <div class="grid cols-3" style="margin-top:18px">
+    <div class="card">
+      <h3>① Agent Cooperation</h3>
+      <p class="muted">Codexや各社エージェントが、作業中・待機中・完了・失敗をMCPツールで明示的に報告する。</p>
+    </div>
+    <div class="card">
+      <h3>② Status Hub</h3>
+      <p class="muted">Vibe Remoteが状態を保持し、VS Code内ビューや将来の物理デバイスへ配信する。</p>
+    </div>
+    <div class="card">
+      <h3>③ Physical UX</h3>
+      <p class="muted">物理ボタンや小型画面はUXとして残す。操作の宛先だけを、VS Code DOMではなくエージェントI/Fにする。</p>
+    </div>
+  </div>
+
+  <h2>3. 技術方針の変更</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>項目</th><th>旧方式</th><th>新方式</th></tr></thead>
+      <tbody>
+        <tr><td>状態取得</td><td>VS Code拡張が外側から推定</td><td>MCP対応エージェントが自己申告</td></tr>
+        <tr><td>承認待ち</td><td>他プラグインのUIやコマンドに依存</td><td>エージェントが承認要求をブリッジへ出す</td></tr>
+        <tr><td>OK/NG</td><td>VS Codeコマンド中継で押す</td><td>将来のdecision responseとしてエージェントI/Fへ返す</td></tr>
+        <tr><td>対応範囲</td><td>VS Code内部実装に左右される</td><td>MCP/ブリッジ対応したエージェントで安定</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note bad">
+    <strong>やらないこと：</strong> VS CodeのDOMや他拡張の非公開状態を無理に操作しない。これはプラグインごとに壊れやすく、汎用リモコンとして成立しにくい。
+  </div>
+
+  <h2>4. MCPステータスブリッジ</h2>
+  <p>現行実装では、エージェントが次のMCPツールで状態を書き込めます。</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>Tool</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>vibe_remote_set_status</code></td><td><code>running</code>, <code>waiting</code>, <code>done</code>, <code>failed</code>, <code>idle</code> を明示的に設定</td></tr>
+        <tr><td><code>vibe_remote_heartbeat</code></td><td>作業継続中のハートビートを更新</td></tr>
+        <tr><td><code>vibe_remote_request_decision</code></td><td>人間の判断待ちと選択肢を表示</td></tr>
+        <tr><td><code>vibe_remote_clear_status</code></td><td>状態をidleへ戻す</td></tr>
+      </tbody>
+    </table>
+  </div>
+<pre>[mcp_servers.vibe_remote]
+command = "/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/node.sh"
+args = ["/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/mcp-server.js"]
+env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }</pre>
+
+  <h2>5. 通信プロトコル</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>Inbound</h3>
+<pre>{ "type":"hello", "token":"..." }
+{ "type":"ping", "token":"..." }
+{
+  "type":"agentStatus",
+  "token":"...",
+  "status":"waiting",
+  "source":"codex",
+  "message":"確認待ち",
+  "ttlMs":120000
+}</pre>
+    </div>
+    <div class="card">
+      <h3>Outbound</h3>
+<pre>{
+  "type":"state",
+  "chat":"maybeWaiting",
+  "agent":{
+    "source":"codex",
+    "status":"waiting",
+    "message":"確認待ち"
+  },
+  "activity":{
+    "errors":0,
+    "warnings":0
+  }
+}</pre>
+    </div>
+  </div>
+
+  <h2>6. デバイス表示</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>LCD表示例</h3>
+<pre>┌──────────────────┐
+│ WAITING           │
+│ codex: confirm    │
+│ 1 OK / 2 NG        │
+│ npm test exit 0    │
+└──────────────────┘</pre>
+    </div>
+    <div class="card">
+      <h3>LED表示ルール</h3>
+      <p><span class="led b"></span><strong>青 常灯</strong> — running / working</p>
+      <p><span class="led y"></span><strong>黄 点滅</strong> — waiting / decision needed</p>
+      <p><span class="led g"></span><strong>緑</strong> — done</p>
+      <p><span class="led r"></span><strong>赤 点滅</strong> — failed / disconnected</p>
+    </div>
+  </div>
+
+  <h2>7. ロードマップ</h2>
+  <div class="step"><div class="n">1</div><div><strong>状態ブリッジを安定化</strong> — MCPからのstatus/heartbeat/request_decisionをVS Codeビューへ表示。</div></div>
+  <div class="step"><div class="n">2</div><div><strong>decision responseを設計</strong> — OK/NGや選択肢をエージェントへ返す標準メッセージを追加。</div></div>
+  <div class="step"><div class="n">3</div><div><strong>スタンドアロンUI検討</strong> — VS Code内ビューに閉じず、スマホ/ブラウザ/物理デバイスから見えるHubにする。</div></div>
+  <div class="step"><div class="n">4</div><div><strong>物理デバイス実装</strong> — M5StickC PLUS2/ESP32でstate streamを受け取り、ボタン入力をresponse bridgeへ返す。</div></div>
+
+  <footer>
+    Vibe Remote — Concept &amp; Technical Spec v0.2 · UXは維持、内部技術はMCP/エージェント協調方式へ更新
+  </footer>
+</div>
+<script>
+  mermaid.initialize({ startOnLoad:true, theme:"dark", themeVariables:{ fontSize:"14px" } });
+</script>
+</body>
+</html>

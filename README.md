@@ -7,8 +7,10 @@ Vibe Remote is a small status bridge for AI coding sessions. MCP-capable agents 
 ```text
 docs/
   PROJECT_HANDOFF.md        Project context and current design notes
+  vibe-remote-concept.html  Promotional concept document
 vibe-remote/
   VS Code status bridge and MCP helper source
+advertizement.png           Temporary concept image for the promotional document
 ```
 
 ## Current Status
