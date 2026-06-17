@@ -61,6 +61,21 @@
           "type": "number",
           "default": 1000,
           "description": "状態を再評価してビューアへ配信する間隔（ミリ秒）。"
+        },
+        "vibeRemote.discoveryEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "mDNSでVibe RemoteをLANへ広告します。M5Stackなどの自動検出用途。"
+        },
+        "vibeRemote.discoveryServiceType": {
+          "type": "string",
+          "default": "vibe-remote",
+          "description": "mDNS service type（_TYPE._tcp.local の TYPE 部分）。"
+        },
+        "vibeRemote.discoveryServiceName": {
+          "type": "string",
+          "default": "Vibe Remote",
+          "description": "mDNSで表示するサービス名。"
         }
       }
     }
@@ -75,6 +90,7 @@
     "vscode:prepublish": "npm run compile -- --production"
   },
   "dependencies": {
+    "bonjour-service": "^1.3.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

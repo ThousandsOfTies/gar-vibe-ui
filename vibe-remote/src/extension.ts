@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { RemoteServer, ServerOptions } from './server';
+import { DiscoveryPublisher } from './discovery';
 import { StateMonitor } from './stateMonitor';
 import { getStatusViewerHtml } from './webview';
 
 const TOKEN_KEY = 'vibeRemote.token';
 
 let server: RemoteServer | undefined;
+let discovery: DiscoveryPublisher | undefined;
 let monitor: StateMonitor | undefined;
 let statusBar: vscode.StatusBarItem | undefined;
 let output: vscode.OutputChannel;
@@ -58,6 +60,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 export function deactivate(): void {
   server?.dispose();
   server = undefined;
+  discovery?.dispose();
+  discovery = undefined;
 }
 
 async function ensureToken(context: vscode.ExtensionContext): Promise<string> {
@@ -80,14 +84,35 @@ function readOptions(token: string): ServerOptions {
   };
 }
 
+function readDiscoveryOptions() {
+  const cfg = vscode.workspace.getConfiguration('vibeRemote');
+  return {
+    enabled: cfg.get<boolean>('discoveryEnabled', false),
+    serviceType: cfg.get<string>('discoveryServiceType', 'vibe-remote'),
+    serviceName: cfg.get<string>('discoveryServiceName', 'Vibe Remote')
+  };
+}
+
 function startServer(context: vscode.ExtensionContext, token: string): void {
   const opts = readOptions(token);
   server = new RemoteServer(opts, monitor!, output);
   server.start();
+
+  const discoveryOpts = readDiscoveryOptions();
+  discovery = new DiscoveryPublisher(
+    {
+      ...discoveryOpts,
+      port: opts.port,
+      bindAddress: opts.host
+    },
+    output
+  );
+  discovery.start();
 }
 
 function restartServer(context: vscode.ExtensionContext, token: string): void {
   server?.dispose();
+  discovery?.dispose();
   startServer(context, token);
 }
 

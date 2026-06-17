@@ -22,6 +22,24 @@ This package runs a local status bridge. MCP-capable agents report their own sta
 - `vibeRemote.bindAddress`
 - `vibeRemote.idleThresholdMs`
 - `vibeRemote.pollIntervalMs`
+- `vibeRemote.discoveryEnabled`
+- `vibeRemote.discoveryServiceType`
+- `vibeRemote.discoveryServiceName`
+
+## Auto Discovery (mDNS)
+
+Vibe Remote can advertise itself on LAN via mDNS for device-side auto discovery.
+
+1. Set `vibeRemote.bindAddress` to `0.0.0.0`.
+2. Set `vibeRemote.discoveryEnabled` to `true`.
+3. Restart with `Vibe Remote: サーバを再起動`.
+
+Service format is `_vibe-remote._tcp.local` by default (customizable via `vibeRemote.discoveryServiceType`).
+
+Security notes:
+
+- mDNS only advertises endpoint metadata. Token is never advertised.
+- Keep token distribution on a separate channel (manual, QR, provisioning step).
 
 ## Build
 
