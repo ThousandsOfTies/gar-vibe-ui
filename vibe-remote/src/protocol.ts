@@ -23,10 +23,79 @@ export interface AgentStatusMessage {
   ttlMs?: number;
 }
 
+export type DeviceUiState = AgentRuntimeStatus;
+
+export interface DeviceUiAction {
+  id: string;
+  label: string;
+  button?: 'A' | 'B' | 'P' | 'A-hold' | 'B-hold' | 'P-hold';
+}
+
+export interface DeviceUiField {
+  label: string;
+  value: string;
+}
+
+export interface DeviceUiSpec {
+  id: string;
+  title?: string;
+  state?: DeviceUiState;
+  message?: string;
+  fields?: DeviceUiField[];
+  actions?: DeviceUiAction[];
+  source?: string;
+  updatedAt: number;
+  expiresAt?: number;
+}
+
+/** MCP/外部エージェント → 拡張：小型デバイス向けUIを表示 */
+export interface DeviceUiMessage {
+  type: 'deviceUi';
+  token: string;
+  ui: Omit<DeviceUiSpec, 'updatedAt'> & { updatedAt?: number; ttlMs?: number };
+}
+
+/** MCP/外部エージェント → 拡張：小型デバイス向けUIを消去 */
+export interface ClearDeviceUiMessage {
+  type: 'clearDeviceUi';
+  token: string;
+  uiId?: string;
+}
+
+/** デバイス → 拡張：小型UI上のアクション選択 */
+export interface UiActionMessage {
+  type: 'uiAction';
+  token: string;
+  uiId: string;
+  actionId: string;
+  button?: string;
+  source?: string;
+}
+
+/** MCP/外部エージェント → 拡張：直近UIアクションの取得 */
+export interface GetUiActionMessage {
+  type: 'getUiAction';
+  token: string;
+  uiId?: string;
+  consume?: boolean;
+}
+
+export interface UiActionSnapshot {
+  uiId: string;
+  actionId: string;
+  button?: string;
+  source: string;
+  ts: number;
+}
+
 export type InboundMessage =
   | HelloMessage
   | PingMessage
-  | AgentStatusMessage;
+  | AgentStatusMessage
+  | DeviceUiMessage
+  | ClearDeviceUiMessage
+  | UiActionMessage
+  | GetUiActionMessage;
 
 /**
  * チャット/作業のざっくり状態（活動ヒューリスティック）。
@@ -35,12 +104,7 @@ export type InboundMessage =
 export type ChatState = 'working' | 'maybeWaiting' | 'idle';
 
 /** エージェント自己申告の実行状態 */
-export type AgentRuntimeStatus =
-  | 'running'
-  | 'waiting'
-  | 'done'
-  | 'failed'
-  | 'idle';
+export type AgentRuntimeStatus = 'running' | 'waiting' | 'done' | 'failed' | 'idle';
 
 export interface AgentStatusSnapshot {
   source: string;
@@ -56,6 +120,8 @@ export interface StateMessage {
   chat: ChatState;
   /** MCP/外部エージェントから自己申告された状態 */
   agent?: AgentStatusSnapshot;
+  /** MCP/外部エージェントから指定された小型デバイス向けUI */
+  ui?: DeviceUiSpec;
   /** 直近に観測できた作業の実況（公式APIで取得） */
   activity: ActivitySnapshot;
   ts: number;
@@ -68,7 +134,13 @@ export interface AckMessage {
   error?: string;
 }
 
-export type OutboundMessage = StateMessage | AckMessage;
+/** 拡張 → MCP/外部エージェント：直近UIアクション取得結果 */
+export interface UiActionResultMessage {
+  type: 'uiActionResult';
+  action?: UiActionSnapshot;
+}
+
+export type OutboundMessage = StateMessage | AckMessage | UiActionResultMessage;
 
 /** 公式APIから安定して取得できる「作業の実況」 */
 export interface ActivitySnapshot {

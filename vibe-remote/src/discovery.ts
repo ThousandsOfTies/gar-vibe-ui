@@ -108,6 +108,9 @@ function sanitizeServiceType(input: string): string {
   if (!raw) {
     return 'vibe-remote';
   }
-  const safe = raw.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safe = raw
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
   return safe || 'vibe-remote';
 }

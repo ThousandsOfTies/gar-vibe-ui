@@ -2,32 +2,36 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { RemoteServer, ServerOptions } from './server';
 import { DiscoveryPublisher } from './discovery';
+import { LocalBridgeManager } from './localBridgeManager';
+import { SerialSppBridge, SerialSppBridgeOptions } from './serialSppBridge';
 import { StateMonitor } from './stateMonitor';
 import { getStatusViewerHtml } from './webview';
 
-const TOKEN_KEY = 'vibeRemote.token';
+const TOKEN_KEY = 'vibeRemote.token.v2';
 
 let server: RemoteServer | undefined;
 let discovery: DiscoveryPublisher | undefined;
+let sppBridge: SerialSppBridge | undefined;
+let localBridge: LocalBridgeManager | undefined;
 let monitor: StateMonitor | undefined;
 let statusBar: vscode.StatusBarItem | undefined;
 let output: vscode.OutputChannel;
+let currentToken = '';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Vibe Remote');
   context.subscriptions.push(output);
 
-  const token = await ensureToken(context);
+  currentToken = await ensureToken(context);
 
   monitor = new StateMonitor();
   context.subscriptions.push(monitor);
+  localBridge = new LocalBridgeManager(context.extensionPath, output);
+  context.subscriptions.push(localBridge);
 
-  startServer(context, token);
+  startServer(context, currentToken);
 
-  statusBar = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100
-  );
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.command = 'vibeRemote.openVirtualRemote';
   statusBar.text = '$(broadcast) Vibe';
   statusBar.tooltip = 'Vibe Remote: クリックで状態ビューアを開く';
@@ -36,22 +40,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     vscode.commands.registerCommand('vibeRemote.openVirtualRemote', () =>
-      openVirtualRemote(context, token)
+      openVirtualRemote(context, currentToken)
     ),
     vscode.commands.registerCommand('vibeRemote.showToken', () => {
-      void vscode.window.showInformationMessage(`Vibe Remote 接続トークン: ${token}`);
+      void vscode.window.showInformationMessage(`Vibe Remote 接続トークン: ${currentToken}`);
     }),
     vscode.commands.registerCommand('vibeRemote.restartServer', () => {
-      restartServer(context, token);
+      restartServer(context, currentToken);
       void vscode.window.showInformationMessage('Vibe Remote サーバを再起動しました。');
-    })
+    }),
+    vscode.commands.registerCommand('vibeRemote.regenerateToken', async () => {
+      const nextToken = await regenerateToken(context);
+      if (!nextToken) {
+        return;
+      }
+      currentToken = nextToken;
+      restartServer(context, currentToken);
+      void vscode.window.showInformationMessage(
+        `Vibe Remote 接続トークンを再生成しました: ${currentToken}`
+      );
+    }),
+    vscode.commands.registerCommand('vibeRemote.startLocalBridge', () => localBridge?.start()),
+    vscode.commands.registerCommand('vibeRemote.stopLocalBridge', () => localBridge?.stop()),
+    vscode.commands.registerCommand('vibeRemote.showLocalBridgeStatus', () =>
+      localBridge?.showStatus()
+    )
   );
 
   // 設定変更でサーバ再起動
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((e) => {
+    vscode.workspace.onDidChangeConfiguration(async (e) => {
       if (e.affectsConfiguration('vibeRemote')) {
-        restartServer(context, token);
+        currentToken = await ensureToken(context);
+        restartServer(context, currentToken);
       }
     })
   );
@@ -62,15 +83,48 @@ export function deactivate(): void {
   server = undefined;
   discovery?.dispose();
   discovery = undefined;
+  sppBridge?.dispose();
+  sppBridge = undefined;
+  localBridge?.dispose();
+  localBridge = undefined;
 }
 
 async function ensureToken(context: vscode.ExtensionContext): Promise<string> {
+  const configuredToken = vscode.workspace
+    .getConfiguration('vibeRemote')
+    .get<string>('token', '')
+    .trim();
+  if (configuredToken) {
+    return configuredToken;
+  }
+
   let token = await context.secrets.get(TOKEN_KEY);
   if (!token) {
-    token = crypto.randomBytes(16).toString('hex');
+    token = createToken();
     await context.secrets.store(TOKEN_KEY, token);
   }
   return token;
+}
+
+async function regenerateToken(context: vscode.ExtensionContext): Promise<string | undefined> {
+  const configuredToken = vscode.workspace
+    .getConfiguration('vibeRemote')
+    .get<string>('token', '')
+    .trim();
+  if (configuredToken) {
+    void vscode.window.showWarningMessage(
+      'vibeRemote.token が設定されているため自動生成トークンは再生成できません。設定値を空にすると再生成できます。'
+    );
+    return undefined;
+  }
+
+  const token = createToken();
+  await context.secrets.store(TOKEN_KEY, token);
+  return token;
+}
+
+function createToken(): string {
+  return crypto.randomBytes(16).toString('hex');
 }
 
 function readOptions(token: string): ServerOptions {
@@ -93,6 +147,15 @@ function readDiscoveryOptions() {
   };
 }
 
+function readSppOptions(): SerialSppBridgeOptions {
+  const cfg = vscode.workspace.getConfiguration('vibeRemote');
+  return {
+    enabled: cfg.get<boolean>('sppEnabled', false),
+    path: cfg.get<string>('sppPort', ''),
+    baudRate: cfg.get<number>('sppBaudRate', 115200)
+  };
+}
+
 function startServer(context: vscode.ExtensionContext, token: string): void {
   const opts = readOptions(token);
   server = new RemoteServer(opts, monitor!, output);
@@ -108,18 +171,19 @@ function startServer(context: vscode.ExtensionContext, token: string): void {
     output
   );
   discovery.start();
+
+  sppBridge = new SerialSppBridge(readSppOptions(), server, output);
+  sppBridge.start();
 }
 
 function restartServer(context: vscode.ExtensionContext, token: string): void {
+  sppBridge?.dispose();
   server?.dispose();
   discovery?.dispose();
   startServer(context, token);
 }
 
-function openVirtualRemote(
-  context: vscode.ExtensionContext,
-  token: string
-): void {
+function openVirtualRemote(context: vscode.ExtensionContext, token: string): void {
   const opts = readOptions(token);
   const panel = vscode.window.createWebviewPanel(
     'vibeRemote.virtualRemote',

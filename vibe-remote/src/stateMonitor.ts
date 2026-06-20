@@ -86,9 +86,7 @@ export class StateMonitor implements vscode.Disposable {
     );
 
     // --- ウィンドウフォーカス ---
-    this.disposables.push(
-      vscode.window.onDidChangeWindowState(() => this.markActivity())
-    );
+    this.disposables.push(vscode.window.onDidChangeWindowState(() => this.markActivity()));
   }
 
   /** 公式APIから取得できる作業の実況スナップショット */

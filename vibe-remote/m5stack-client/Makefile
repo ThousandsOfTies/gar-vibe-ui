@@ -2,7 +2,16 @@ PIO_ENV ?= m5stack-core2
 ARTIFACT_DIR ?=
 PORT ?=
 
-.PHONY: vm-package install-artifact
+.PHONY: build upload monitor vm-package install-artifact
+
+build:
+	pio run -e "$(PIO_ENV)"
+
+upload:
+	pio run -e "$(PIO_ENV)" -t upload
+
+monitor:
+	pio device monitor
 
 vm-package:
 	./scripts/vm_build_and_package.sh "$(PIO_ENV)"

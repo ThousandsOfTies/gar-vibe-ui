@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Vibe Remote — Concept & Spec</title>
+<title>Vibe Remote — Concept & Device Spec</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -96,20 +96,20 @@
 <div class="wrap">
 
   <header class="hero">
-    <span class="badge">Concept &amp; Spec v0.2</span>
+    <span class="badge">Concept &amp; Device Spec v0.3</span>
     <h1>Vibe Remote</h1>
     <p class="tagline">
-      PCの前に座らなくても、Vibeを止めない。AIエージェントの状態と承認待ちを、手元の小さなリモコンへ。
+      PCの前に座らなくても、Vibeを止めない。AIエージェントの状態と承認待ちを、VS Codeビューと手元の小さなデバイスへ。
     </p>
     <div class="hero-shot">
       <img src="../advertizement.png" alt="Vibe Remote の製品コンセプト画像" />
-      <div class="hero-shot-caption">旧コンセプト画像を仮置き。内部技術はMCP/エージェント協調方式へ更新済み。</div>
+      <div class="hero-shot-caption">MCPステータスブリッジを中核に、LAN内デバイスへmDNSで接続先を見つけさせる構成へ更新。</div>
     </div>
     <div class="kpis">
       <div class="kpi"><b>State</b><span>作業中・待機中</span></div>
-      <div class="kpi"><b>OK / NG</b><span>承認・却下</span></div>
-      <div class="kpi"><b>Prompt</b><span>選択肢表示</span></div>
-      <div class="kpi"><b>Notify</b><span>離席中の通知</span></div>
+      <div class="kpi"><b>mDNS</b><span>自動発見</span></div>
+      <div class="kpi"><b>M5Stack</b><span>実機ドラフト</span></div>
+      <div class="kpi"><b>Token</b><span>共有鍵接続</span></div>
     </div>
   </header>
 
@@ -117,17 +117,17 @@
   <div class="grid cols-2">
     <div class="card">
       <h3>解きたい課題</h3>
-      <p>AIエージェントは作業の途中で、人間の判断を必要とする。PCの前へ戻って確認するだけの時間は、思ったより流れを止める。</p>
-      <p>本質的に必要なのは、状態を知ること、承認すること、却下すること、短い追加指示を返すこと。</p>
+      <p>AIエージェントは作業の途中で、人間の判断を必要とする。PCの前へ戻って状態を確認するだけの時間は、思ったより流れを止める。</p>
+      <p>本質的に必要なのは、状態を知ること、必要なら承認・却下すること、短い追加指示を返すこと。</p>
     </div>
     <div class="card">
       <h3>体験の理想形</h3>
-      <p>ソファや別作業中でも、手元の小さなデバイスで <span class="ok">OK</span> / <span class="no">NG</span> を返す。</p>
-      <p>画面には「何を待っているか」「どの選択肢があるか」「作業は進行中か」が簡潔に出る。</p>
+      <p>ソファや別作業中でも、VS Codeビューや手元の小さなデバイスで、エージェントが今どこにいるかを確認する。</p>
+      <p>画面には「作業中か」「待っているか」「どのエージェントが報告しているか」が短く出る。物理ボタンは次フェーズの入力導線になる。</p>
     </div>
   </div>
   <div class="note good" style="margin-top:18px">
-    <strong>UXは維持。</strong> 変わったのは実装方式です。VS Codeの他プラグインを外側から押すのではなく、対応エージェントがMCP/ブリッジへ状態と承認要求を自己申告します。
+    <strong>UXは維持。</strong> 変わったのは実装方式です。VS Codeの他プラグインを外側から押すのではなく、対応エージェントがMCP/ブリッジへ状態を自己申告し、デバイスはその状態を購読します。
   </div>
 
   <h2>2. システム全体像</h2>
@@ -140,7 +140,10 @@ flowchart LR
     AGENT -->|"MCP tools"| MCP["Vibe Remote MCP Bridge"]
     MCP -->|"WebSocket + token"| HUB["Vibe Remote Status Hub"]
     HUB -->|"state stream"| VIEW["VS Code 状態ビューア"]
-    HUB -->|"state stream"| DEV["ESP32 / M5StickC Remote"]
+    HUB -->|"mDNS advertises endpoint"| MDNS["LAN Discovery"]
+    MDNS -->|"host + port"| DEV["ESP32 / M5Stack Remote"]
+    HUB -->|"state stream"| DEV
+    DEV -->|"agentStatus draft"| HUB
     DEV -.->|"future: decision response"| HUB
     HUB -.->|"future: response bridge"| AGENT
   </div>
@@ -155,7 +158,7 @@ flowchart LR
     </div>
     <div class="card">
       <h3>③ Physical UX</h3>
-      <p class="muted">物理ボタンや小型画面はUXとして残す。操作の宛先だけを、VS Code DOMではなくエージェントI/Fにする。</p>
+      <p class="muted">物理ボタンや小型画面はUXとして残す。現在はM5Stackドラフトで状態表示と簡易status送信を検証中。</p>
     </div>
   </div>
 
@@ -166,7 +169,7 @@ flowchart LR
       <tbody>
         <tr><td>状態取得</td><td>VS Code拡張が外側から推定</td><td>MCP対応エージェントが自己申告</td></tr>
         <tr><td>承認待ち</td><td>他プラグインのUIやコマンドに依存</td><td>エージェントが承認要求をブリッジへ出す</td></tr>
-        <tr><td>OK/NG</td><td>VS Codeコマンド中継で押す</td><td>将来のdecision responseとしてエージェントI/Fへ返す</td></tr>
+        <tr><td>OK/NG</td><td>VS Codeコマンド中継で押す</td><td>将来のdecision responseとしてエージェントI/Fへ返す。現ドラフトではagentStatus送信を先に検証</td></tr>
         <tr><td>対応範囲</td><td>VS Code内部実装に左右される</td><td>MCP/ブリッジ対応したエージェントで安定</td></tr>
       </tbody>
     </table>
@@ -226,7 +229,29 @@ env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }</pre>
     </div>
   </div>
 
-  <h2>6. デバイス表示</h2>
+  <h2>6. デバイス連携</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>PC側設定</h3>
+<pre>vibeRemote.bindAddress = 0.0.0.0
+vibeRemote.discoveryEnabled = true
+Vibe Remote: サーバを再起動
+Vibe Remote: 接続トークンを表示</pre>
+    </div>
+    <div class="card">
+      <h3>M5Stack側</h3>
+<pre>cd vibe-remote/m5stack-client
+pio run
+pio run -t upload
+pio device monitor</pre>
+      <p class="muted">Wi-Fi SSID、パスワード、接続トークンは <code>platformio.ini</code> の <code>build_flags</code> で指定する。</p>
+    </div>
+  </div>
+  <div class="note" style="margin-top:18px">
+    <strong>現在地：</strong> M5Stackクライアントは接続検証用ドラフト。mDNS探索、WebSocket接続、hello/ping、BtnA/B/Cによるstatus送信まで実装済み。
+  </div>
+
+  <h2>7. デバイス表示</h2>
   <div class="grid cols-2">
     <div class="card">
       <h3>LCD表示例</h3>
@@ -246,14 +271,14 @@ env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }</pre>
     </div>
   </div>
 
-  <h2>7. ロードマップ</h2>
-  <div class="step"><div class="n">1</div><div><strong>状態ブリッジを安定化</strong> — MCPからのstatus/heartbeat/request_decisionをVS Codeビューへ表示。</div></div>
-  <div class="step"><div class="n">2</div><div><strong>decision responseを設計</strong> — OK/NGや選択肢をエージェントへ返す標準メッセージを追加。</div></div>
-  <div class="step"><div class="n">3</div><div><strong>スタンドアロンUI検討</strong> — VS Code内ビューに閉じず、スマホ/ブラウザ/物理デバイスから見えるHubにする。</div></div>
-  <div class="step"><div class="n">4</div><div><strong>物理デバイス実装</strong> — M5StickC PLUS2/ESP32でstate streamを受け取り、ボタン入力をresponse bridgeへ返す。</div></div>
+  <h2>8. ロードマップ</h2>
+  <div class="step"><div class="n">1</div><div><strong>状態ブリッジを安定化</strong> — MCPからのstatus/heartbeat/request_decisionをVS Codeビューへ表示。<span class="ok"> 実装済み</span></div></div>
+  <div class="step"><div class="n">2</div><div><strong>LAN discoveryを安定化</strong> — mDNS広告とM5Stack側の自動発見を実機ネットワークで検証。<span class="warn"> 検証中</span></div></div>
+  <div class="step"><div class="n">3</div><div><strong>decision responseを設計</strong> — OK/NGや選択肢をエージェントへ返す標準メッセージを追加。</div></div>
+  <div class="step"><div class="n">4</div><div><strong>入力UXを仕上げる</strong> — M5Stackのボタン、画面、トークン設定、再接続表示を実運用向けに整える。</div></div>
 
   <footer>
-    Vibe Remote — Concept &amp; Technical Spec v0.2 · UXは維持、内部技術はMCP/エージェント協調方式へ更新
+    Vibe Remote — Concept &amp; Device Spec v0.3 · MCP status hub + LAN discovery + M5Stack draft client
   </footer>
 </div>
 <script>

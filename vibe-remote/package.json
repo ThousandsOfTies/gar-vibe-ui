@@ -27,8 +27,24 @@
         "title": "Vibe Remote: 接続トークンを表示"
       },
       {
+        "command": "vibeRemote.regenerateToken",
+        "title": "Vibe Remote: 接続トークンを再生成"
+      },
+      {
         "command": "vibeRemote.restartServer",
         "title": "Vibe Remote: サーバを再起動"
+      },
+      {
+        "command": "vibeRemote.startLocalBridge",
+        "title": "Vibe Remote: Local Bridgeを開始"
+      },
+      {
+        "command": "vibeRemote.stopLocalBridge",
+        "title": "Vibe Remote: Local Bridgeを停止"
+      },
+      {
+        "command": "vibeRemote.showLocalBridgeStatus",
+        "title": "Vibe Remote: Local Bridgeの状態を表示"
       }
     ],
     "configuration": {
@@ -51,6 +67,11 @@
             "LAN全体に公開（ESP32などの実機から接続する場合のみ。トークン必須）"
           ],
           "description": "WebSocketサーバのバインドアドレス。実機デバイスから接続する場合のみ 0.0.0.0 を選択してください。"
+        },
+        "vibeRemote.token": {
+          "type": "string",
+          "default": "",
+          "description": "実機ファームウェアと共有する接続トークン。空の場合はVS Code SecretStorageに自動生成したトークンを使います。"
         },
         "vibeRemote.idleThresholdMs": {
           "type": "number",
@@ -76,6 +97,46 @@
           "type": "string",
           "default": "Vibe Remote",
           "description": "mDNSで表示するサービス名。"
+        },
+        "vibeRemote.sppEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Bluetooth Classic SPPをOSのシリアルポートとして開き、M5StackとJSON Linesで接続します。"
+        },
+        "vibeRemote.sppPort": {
+          "type": "string",
+          "default": "",
+          "description": "SPPペアリング後にOSへ現れるシリアルポート名（例: COM5, /dev/rfcomm0）。"
+        },
+        "vibeRemote.sppBaudRate": {
+          "type": "number",
+          "default": 115200,
+          "description": "SPPシリアルポートのボーレート。Bluetooth SPPでは通常115200のままで問題ありません。"
+        },
+        "vibeRemote.localBridge.listenPort": {
+          "type": "number",
+          "default": 39273,
+          "description": "Host OS側でLocal Bridgeが待ち受けるポート番号。"
+        },
+        "vibeRemote.localBridge.upstreamPort": {
+          "type": "number",
+          "default": 39271,
+          "description": "WSL/remote extension host内のVibe Remote WebSocketサーバへ接続するポート番号。"
+        },
+        "vibeRemote.localBridge.advertiseHost": {
+          "type": "string",
+          "default": "",
+          "description": "mDNSで広告するHost OS側LAN IPv4。空の場合は自動検出します。"
+        },
+        "vibeRemote.localBridge.logPath": {
+          "type": "string",
+          "default": "/tmp/vibe-local-bridge.log",
+          "description": "Local Bridgeの標準出力ログ保存先。"
+        },
+        "vibeRemote.localBridge.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Local Bridgeを起動するHost OS側Node.js実行ファイル。空の場合は自動検出します。"
         }
       }
     }
@@ -83,21 +144,34 @@
   "scripts": {
     "compile": "node esbuild.js",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run compile && npm run typecheck && npm audit --audit-level=high",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test --import tsx test/*.test.ts",
+    "ci": "npm run compile && npm run typecheck && npm run lint && npm run format:check && npm run test && npm audit --audit-level=high",
     "mcp": "node scripts/mcp-server.js",
+    "local:bridge": "node scripts/local-bridge.js",
     "smoke:protocol": "node scripts/smoke-protocol.js",
+    "virtual:device": "node scripts/virtual-device.js",
     "watch": "node esbuild.js --watch",
     "vscode:prepublish": "npm run compile -- --production"
   },
   "dependencies": {
     "bonjour-service": "^1.3.0",
+    "serialport": "^13.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.10",
     "esbuild": "^0.28.1",
-    "typescript": "^5.5.0"
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4",
+    "tsx": "^4.22.4",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.61.1"
   }
 }

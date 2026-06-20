@@ -2,11 +2,7 @@
  * 状態ビューアのWebView HTMLを生成する。
  * ローカルWebSocketサーバに接続し、MCP/外部エージェントから届いた状態を表示する。
  */
-export function getStatusViewerHtml(
-  host: string,
-  port: number,
-  token: string
-): string {
+export function getStatusViewerHtml(host: string, port: number, token: string): string {
   const wsUrl = `ws://${host}:${port}`;
   return /* html */ `<!DOCTYPE html>
 <html lang="ja">

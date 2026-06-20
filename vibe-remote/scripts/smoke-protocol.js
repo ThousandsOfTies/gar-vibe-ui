@@ -40,13 +40,15 @@ ws.on('open', () => {
   ws.send(JSON.stringify({ type: 'ping', token }));
 
   if (status) {
-    ws.send(JSON.stringify({
-      type: 'agentStatus',
-      status,
-      source: 'smoke',
-      message: 'smoke protocol test',
-      token
-    }));
+    ws.send(
+      JSON.stringify({
+        type: 'agentStatus',
+        status,
+        source: 'smoke',
+        message: 'smoke protocol test',
+        token
+      })
+    );
   }
 });
 
