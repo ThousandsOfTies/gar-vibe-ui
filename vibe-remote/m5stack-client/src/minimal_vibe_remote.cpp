@@ -84,6 +84,9 @@ String deviceUiId;
 String deviceUiTitle;
 String deviceUiState = "waiting";
 String deviceUiMessage;
+String deviceUiFieldLabels[3];
+String deviceUiFieldValues[3];
+int deviceUiFieldCount = 0;
 String deviceUiActionIds[3];
 String deviceUiActionLabels[3];
 String deviceUiActionButtons[3];
@@ -113,6 +116,7 @@ String lastDrawnChat;
 String lastDrawnAgentSource;
 String lastDrawnAgentStatus;
 String lastDrawnAgentMessage;
+String lastDrawnDeviceUiDetails;
 String lastDrawnHit;
 String lastDrawnFooter;
 
@@ -236,20 +240,56 @@ void drawInfoRows(int width, const String& ipText, const String& hubText, const 
 
 void drawDeviceUiDetails(int width) {
   clearArea(7, 105, width - 14, 48);
-  if (deviceUiMessage.length() > 0) {
+  if (deviceUiFieldCount == 0 && deviceUiMessage.length() > 0) {
     drawWrappedText(deviceUiMessage, 7, 106, 18, 3, TFT_WHITE, TFT_BLACK);
     return;
   }
 
-  M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   M5.Display.setTextSize(1);
-  for (int index = 0; index < deviceUiActionCount; ++index) {
+  int row = 0;
+  if (deviceUiMessage.length() > 0) {
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
+    row = 1;
+  }
+  for (int index = 0; index < deviceUiFieldCount && row < 3; ++index, ++row) {
+    M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    M5.Display.drawString(deviceUiFieldLabels[index].substring(0, 7), 7, 106 + row * 13);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(deviceUiFieldValues[index].substring(0, 18), 54, 106 + row * 13);
+  }
+  if (row > 0) {
+    return;
+  }
+
+  M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  for (int index = 0; index < deviceUiActionCount && index < 3; ++index) {
     M5.Display.drawString(
       deviceUiActionButtons[index].substring(0, 1) + String(" ") + deviceUiActionLabels[index].substring(0, 14),
       7,
       106 + index * 13
     );
   }
+}
+
+String deviceUiDetailsSignature() {
+  if (!deviceUiActive) {
+    return "";
+  }
+  String signature = deviceUiMessage;
+  for (int index = 0; index < deviceUiFieldCount; ++index) {
+    signature += "|";
+    signature += deviceUiFieldLabels[index];
+    signature += "=";
+    signature += deviceUiFieldValues[index];
+  }
+  for (int index = 0; index < deviceUiActionCount; ++index) {
+    signature += "|";
+    signature += deviceUiActionButtons[index];
+    signature += ":";
+    signature += deviceUiActionLabels[index];
+  }
+  return signature;
 }
 
 void drawToast(int width, const String& hit) {
@@ -330,6 +370,7 @@ void drawUi() {
     lastDrawnAgentSource = "";
     lastDrawnAgentStatus = "";
     lastDrawnAgentMessage = "";
+    lastDrawnDeviceUiDetails = "";
     lastDrawnHit = "";
     lastDrawnFooter = "";
   }
@@ -346,7 +387,8 @@ void drawUi() {
     ipText != lastDrawnIp ||
     hubText != lastDrawnHub ||
     displayMessage != lastDrawnAgentMessage ||
-    displaySource != lastDrawnAgentSource;
+    displaySource != lastDrawnAgentSource ||
+    (deviceUiActive && deviceUiDetailsSignature() != lastDrawnDeviceUiDetails);
   if (displayStatus != lastDrawnAgentStatus || displayChat != lastDrawnChat || displaySource != lastDrawnAgentSource) {
     drawStatusCard(width, displayStatus, displayChat, displaySource, stateColor);
     lastDrawnAgentStatus = displayStatus;
@@ -362,6 +404,7 @@ void drawUi() {
     lastDrawnIp = ipText;
     lastDrawnHub = hubText;
     lastDrawnAgentMessage = displayMessage;
+    lastDrawnDeviceUiDetails = deviceUiActive ? deviceUiDetailsSignature() : "";
   }
   if (hit != lastDrawnHit) {
     drawToast(width, hit);
@@ -476,6 +519,21 @@ void applyState(JsonDocument& doc) {
     deviceUiTitle = ui["title"] | "UI";
     deviceUiState = ui["state"] | "waiting";
     deviceUiMessage = ui["message"] | "";
+    deviceUiFieldCount = 0;
+    JsonArray fields = ui["fields"].as<JsonArray>();
+    for (JsonObject field : fields) {
+      if (deviceUiFieldCount >= 3) {
+        break;
+      }
+      String label = field["label"] | "";
+      String value = field["value"] | "";
+      if (label.length() == 0 && value.length() == 0) {
+        continue;
+      }
+      deviceUiFieldLabels[deviceUiFieldCount] = label;
+      deviceUiFieldValues[deviceUiFieldCount] = value;
+      ++deviceUiFieldCount;
+    }
     deviceUiActionCount = 0;
     JsonArray actions = ui["actions"].as<JsonArray>();
     for (JsonObject action : actions) {
@@ -503,6 +561,7 @@ void applyState(JsonDocument& doc) {
     deviceUiTitle = "";
     deviceUiState = "waiting";
     deviceUiMessage = "";
+    deviceUiFieldCount = 0;
     deviceUiActionCount = 0;
   }
   displayDirty = true;

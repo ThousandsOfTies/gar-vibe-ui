@@ -7,6 +7,8 @@ const DEFAULT_PORT = Number(process.env.VIBE_REMOTE_PORT || 39271);
 const DEFAULT_TOKEN = process.env.VIBE_REMOTE_TOKEN || '';
 const DEFAULT_TTL_SECONDS = Number(process.env.VIBE_REMOTE_TTL_SECONDS || 120);
 const DEFAULT_REQUEST_TIMEOUT_MS = Number(process.env.VIBE_REMOTE_REQUEST_TIMEOUT_MS || 5000);
+const DEFAULT_ACTION_TIMEOUT_SECONDS = Number(process.env.VIBE_REMOTE_ACTION_TIMEOUT_SECONDS || 60);
+const ACTION_POLL_INTERVAL_MS = Number(process.env.VIBE_REMOTE_ACTION_POLL_INTERVAL_MS || 1000);
 
 let remoteClient;
 let requestQueue = Promise.resolve();
@@ -61,6 +63,17 @@ const tools = [
       },
       required: ['message'],
       additionalProperties: false
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ui_id: { type: 'string' },
+        status: { type: 'string' },
+        action_count: { type: 'number' },
+        timeout_seconds: { type: 'number' }
+      },
+      required: ['ui_id', 'status', 'action_count', 'timeout_seconds'],
+      additionalProperties: false
     }
   },
   {
@@ -112,6 +125,17 @@ const tools = [
         ttl_seconds: { type: 'number', description: 'How long the UI remains fresh.' }
       },
       additionalProperties: false
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ui_id: { type: 'string' },
+        status: { type: 'string' },
+        action_count: { type: 'number' },
+        timeout_seconds: { type: 'number' }
+      },
+      required: ['ui_id', 'status', 'action_count', 'timeout_seconds'],
+      additionalProperties: false
     }
   },
   {
@@ -124,6 +148,11 @@ const tools = [
         consume: {
           type: 'boolean',
           description: 'Whether to consume the action. Defaults to true.'
+        },
+        timeout_seconds: {
+          type: 'number',
+          description:
+            'How long to wait for an action before returning empty. Defaults to 60 seconds. Use 0 for immediate polling.'
         }
       },
       additionalProperties: false
@@ -252,7 +281,12 @@ async function callTool(name, args) {
       source: args.source,
       ttlSeconds: args.ttl_seconds
     });
-    return textResult(`Vibe Remote decision request posted. ui_id=${uiId}`);
+    return toolResult(`Vibe Remote decision request posted. ui_id=${uiId}`, {
+      ui_id: uiId,
+      status: 'waiting',
+      action_count: normalizeChoiceActions(args.choices).length,
+      timeout_seconds: DEFAULT_ACTION_TIMEOUT_SECONDS
+    });
   }
   if (name === 'vibe_remote_show_ui') {
     const uiId = args.id || `ui-${Date.now().toString(36)}`;
@@ -266,14 +300,20 @@ async function callTool(name, args) {
       source: args.source,
       ttlSeconds: args.ttl_seconds
     });
-    return textResult(`Vibe Remote UI shown. ui_id=${uiId}`);
+    return toolResult(`Vibe Remote UI shown. ui_id=${uiId}`, {
+      ui_id: uiId,
+      status: args.state || 'waiting',
+      action_count: Array.isArray(args.actions) ? Math.min(args.actions.length, 3) : 0,
+      timeout_seconds: DEFAULT_ACTION_TIMEOUT_SECONDS
+    });
   }
   if (name === 'vibe_remote_get_action') {
     const action = await getUiAction({
       uiId: args.ui_id,
-      consume: args.consume
+      consume: args.consume,
+      timeoutSeconds: args.timeout_seconds
     });
-    return textResult(action ? JSON.stringify(action) : 'No Vibe Remote UI action available.');
+    return textResult(action ? JSON.stringify(action) : 'No Vibe Remote UI action before timeout.');
   }
   if (name === 'vibe_remote_clear_ui') {
     await clearDeviceUi({ uiId: args.ui_id });
@@ -336,12 +376,30 @@ async function postDeviceUi({ id, title, state, message, fields, actions, source
   });
 }
 
-async function getUiAction({ uiId, consume }) {
+async function getUiAction({ uiId, consume, timeoutSeconds }) {
   if (!DEFAULT_TOKEN) {
     throw new Error(
       'VIBE_REMOTE_TOKEN is required. Run "Vibe Remote: 接続トークンを表示" and configure it as an MCP env var.'
     );
   }
+  const timeoutMs = Math.max(
+    0,
+    Math.round(
+      (Number.isFinite(timeoutSeconds) ? timeoutSeconds : DEFAULT_ACTION_TIMEOUT_SECONDS) * 1000
+    )
+  );
+  const deadline = Date.now() + timeoutMs;
+
+  while (true) {
+    const action = await readUiAction({ uiId, consume });
+    if (action || timeoutMs === 0 || Date.now() >= deadline) {
+      return action;
+    }
+    await sleep(Math.min(ACTION_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
+  }
+}
+
+async function readUiAction({ uiId, consume }) {
   const result = await sendWs(
     {
       type: 'getUiAction',
@@ -352,6 +410,10 @@ async function getUiAction({ uiId, consume }) {
     'uiActionResult'
   );
   return result.action;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function clearDeviceUi({ uiId }) {
@@ -536,6 +598,10 @@ process.once('SIGTERM', () => {
 
 function textResult(text) {
   return { content: [{ type: 'text', text }] };
+}
+
+function toolResult(text, structuredContent) {
+  return { content: [{ type: 'text', text }], structuredContent };
 }
 
 function write(message) {

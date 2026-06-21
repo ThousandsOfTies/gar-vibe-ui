@@ -96,7 +96,7 @@
 <div class="wrap">
 
   <header class="hero">
-    <span class="badge">Concept &amp; Device Spec v0.3</span>
+    <span class="badge">Concept &amp; Device Spec v0.4</span>
     <h1>Vibe Remote</h1>
     <p class="tagline">
       PCの前に座らなくても、Vibeを止めない。AIエージェントの状態と承認待ちを、VS Codeビューと手元の小さなデバイスへ。
@@ -108,7 +108,7 @@
     <div class="kpis">
       <div class="kpi"><b>State</b><span>作業中・待機中</span></div>
       <div class="kpi"><b>mDNS</b><span>自動発見</span></div>
-      <div class="kpi"><b>M5Stack</b><span>実機ドラフト</span></div>
+      <div class="kpi"><b>M5Stack</b><span>実機検証済み</span></div>
       <div class="kpi"><b>Token</b><span>共有鍵接続</span></div>
     </div>
   </header>
@@ -132,20 +132,37 @@
 
   <h2>2. システム全体像</h2>
   <div class="mermaid">
-flowchart LR
-    subgraph AGENT["AI Agent / Runtime"]
-      WORK["作業状態"]
-      ASK["承認要求・選択肢"]
+flowchart TD
+    subgraph PC["PC / VS Code"]
+      subgraph REMOTE["Remote実行: VS Code Extension Host / WSL / SSH / Dev Container"]
+        subgraph AGENT["AI Agent / Runtime"]
+          WORK["作業状態"]
+          ASK["承認要求・選択肢"]
+        end
+        MCP["Vibe Remote MCP Bridge"]
+        HUB["Vibe Remote Status Hub<br/>127.0.0.1:39271"]
+      end
+      subgraph LOCAL["Local実行 / Host OS"]
+        VIEW["VS Code 状態ビューア"]
+        BRIDGE["Local Bridge<br/>LAN:39273"]
+      end
     end
-    AGENT -->|"MCP tools"| MCP["Vibe Remote MCP Bridge"]
-    MCP -->|"WebSocket + token"| HUB["Vibe Remote Status Hub"]
-    HUB -->|"state stream"| VIEW["VS Code 状態ビューア"]
-    HUB -->|"mDNS advertises endpoint"| MDNS["LAN Discovery"]
-    MDNS -->|"host + port"| DEV["ESP32 / M5Stack Remote"]
-    HUB -->|"state stream"| DEV
-    DEV -->|"agentStatus draft"| HUB
-    DEV -.->|"future: decision response"| HUB
-    HUB -.->|"future: response bridge"| AGENT
+    subgraph LAN["LAN / Discovery"]
+      MDNS["mDNS: _vibe-remote._tcp.local"]
+    end
+    subgraph DEVICE["Physical Device"]
+      DEV["ESP32 / M5Stack Remote"]
+    end
+    AGENT -->|"MCP tools"| MCP
+    MCP -->|"WebSocket + token"| HUB
+    HUB -->|"state stream"| VIEW
+    HUB -->|"Remote実行時: proxy"| BRIDGE
+    HUB -.->|"Local実行時: direct LAN bind"| DEV
+    BRIDGE -->|"state + device UI stream"| DEV
+    BRIDGE -->|"advertises endpoint"| MDNS
+    MDNS -->|"host + port"| DEV
+    DEV -->|"uiAction"| HUB
+    HUB -->|"get_action result"| MCP
   </div>
   <div class="grid cols-3" style="margin-top:18px">
     <div class="card">
@@ -154,11 +171,11 @@ flowchart LR
     </div>
     <div class="card">
       <h3>② Status Hub</h3>
-      <p class="muted">Vibe Remoteが状態を保持し、VS Code内ビューや将来の物理デバイスへ配信する。</p>
+      <p class="muted">Vibe Remoteが状態と小型デバイス向けUIを保持し、VS Code内ビューや物理デバイスへ配信する。</p>
     </div>
     <div class="card">
       <h3>③ Physical UX</h3>
-      <p class="muted">物理ボタンや小型画面はUXとして残す。現在はM5Stackドラフトで状態表示と簡易status送信を検証中。</p>
+      <p class="muted">M5StickC Plus2では状態表示、device UI表示、A/B/Pボタンからの選択返却まで実機確認済み。</p>
     </div>
   </div>
 
@@ -169,7 +186,7 @@ flowchart LR
       <tbody>
         <tr><td>状態取得</td><td>VS Code拡張が外側から推定</td><td>MCP対応エージェントが自己申告</td></tr>
         <tr><td>承認待ち</td><td>他プラグインのUIやコマンドに依存</td><td>エージェントが承認要求をブリッジへ出す</td></tr>
-        <tr><td>OK/NG</td><td>VS Codeコマンド中継で押す</td><td>将来のdecision responseとしてエージェントI/Fへ返す。現ドラフトではagentStatus送信を先に検証</td></tr>
+        <tr><td>OK/NG</td><td>VS Codeコマンド中継で押す</td><td>device UIのactionとして表示し、物理ボタン入力を<code>uiAction</code>として返す</td></tr>
         <tr><td>対応範囲</td><td>VS Code内部実装に左右される</td><td>MCP/ブリッジ対応したエージェントで安定</td></tr>
       </tbody>
     </table>
@@ -186,7 +203,10 @@ flowchart LR
       <tbody>
         <tr><td><code>vibe_remote_set_status</code></td><td><code>running</code>, <code>waiting</code>, <code>done</code>, <code>failed</code>, <code>idle</code> を明示的に設定</td></tr>
         <tr><td><code>vibe_remote_heartbeat</code></td><td>作業継続中のハートビートを更新</td></tr>
-        <tr><td><code>vibe_remote_request_decision</code></td><td>人間の判断待ちと選択肢を表示</td></tr>
+        <tr><td><code>vibe_remote_request_decision</code></td><td>人間の判断待ちと選択肢を表示し、<code>structuredContent.ui_id</code> を返す</td></tr>
+        <tr><td><code>vibe_remote_show_ui</code></td><td>小型デバイスへタイトル、メッセージ、最大3件の項目とアクションを表示し、<code>structuredContent.ui_id</code> を返す</td></tr>
+        <tr><td><code>vibe_remote_get_action</code></td><td>デバイスから返るボタンアクションを取得。既定では最大60秒待機</td></tr>
+        <tr><td><code>vibe_remote_clear_ui</code></td><td>表示中のdevice UIをクリア</td></tr>
         <tr><td><code>vibe_remote_clear_status</code></td><td>状態をidleへ戻す</td></tr>
       </tbody>
     </table>
@@ -209,6 +229,30 @@ env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }</pre>
   "source":"codex",
   "message":"確認待ち",
   "ttlMs":120000
+}
+{
+  "type":"deviceUi",
+  "token":"...",
+  "ui":{
+    "id":"decision-1",
+    "title":"Decision",
+    "state":"waiting",
+    "message":"Flash firmware now?",
+    "actions":[
+      {"id":"ok","label":"OK","button":"A"},
+      {"id":"ng","label":"NG","button":"B"},
+      {"id":"later","label":"Later","button":"P"}
+    ],
+    "ttlMs":180000
+  }
+}
+{
+  "type":"uiAction",
+  "token":"...",
+  "uiId":"decision-1",
+  "actionId":"ok",
+  "button":"A",
+  "source":"M5StickC-Plus2-Vibe-Min"
 }</pre>
     </div>
     <div class="card">
@@ -221,9 +265,25 @@ env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }</pre>
     "status":"waiting",
     "message":"確認待ち"
   },
+  "ui":{
+    "id":"decision-1",
+    "title":"Decision",
+    "state":"waiting",
+    "message":"Flash firmware now?",
+    "actions":[{"id":"ok","label":"OK","button":"A"}]
+  },
   "activity":{
     "errors":0,
     "warnings":0
+  }
+}
+{
+  "type":"uiActionResult",
+  "action":{
+    "uiId":"decision-1",
+    "actionId":"ok",
+    "button":"A",
+    "source":"M5StickC-Plus2-Vibe-Min"
   }
 }</pre>
     </div>
@@ -244,11 +304,11 @@ Vibe Remote: 接続トークンを表示</pre>
 pio run
 pio run -t upload
 pio device monitor</pre>
-      <p class="muted">Wi-Fi SSID、パスワード、接続トークンは <code>platformio.ini</code> の <code>build_flags</code> で指定する。</p>
+      <p class="muted">Wi-Fi SSID、パスワード、接続トークンは <code>.env.local</code> または <code>platformio.ini</code> の <code>build_flags</code> で指定する。</p>
     </div>
   </div>
   <div class="note" style="margin-top:18px">
-    <strong>現在地：</strong> M5Stackクライアントは接続検証用ドラフト。mDNS探索、WebSocket接続、hello/ping、BtnA/B/Cによるstatus送信まで実装済み。
+    <strong>現在地：</strong> M5StickC Plus2でmDNS探索、WebSocket接続、device UI表示、A/B/Pボタンによる<code>uiAction</code>返却まで実機確認済み。UIが無い時は状態表示と簡易status送信にフォールバックする。
   </div>
 
   <h2>7. デバイス表示</h2>
@@ -257,28 +317,55 @@ pio device monitor</pre>
       <h3>LCD表示例</h3>
 <pre>┌──────────────────┐
 │ WAITING           │
-│ codex: confirm    │
-│ 1 OK / 2 NG        │
-│ npm test exit 0    │
+│ Decision          │
+│ Flash now?        │
+│ Step  upload      │
+│ A OK  B NG  P...  │
 └──────────────────┘</pre>
     </div>
     <div class="card">
-      <h3>LED表示ルール</h3>
-      <p><span class="led b"></span><strong>青 常灯</strong> — running / working</p>
-      <p><span class="led y"></span><strong>黄 点滅</strong> — waiting / decision needed</p>
-      <p><span class="led g"></span><strong>緑</strong> — done</p>
-      <p><span class="led r"></span><strong>赤 点滅</strong> — failed / disconnected</p>
+      <h3>表示ルール</h3>
+      <table>
+        <tbody>
+          <tr><td>Status card</td><td><code>state</code> と <code>title</code> を表示。タイトルは実機上では9文字まで。</td></tr>
+          <tr><td>Message</td><td><code>fields</code> が無ければ最大3行で折り返し。<code>fields</code> がある場合は1行に省略。</td></tr>
+          <tr><td>Fields</td><td>最大3行。<code>message</code> がある場合は残り2行、無い場合は3行。labelは7文字、valueは18文字まで。</td></tr>
+          <tr><td>Footer</td><td><code>A</code> / <code>B</code> / <code>P</code> のアクションを常時表示。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="grid cols-2" style="margin-top:18px">
+    <div class="card">
+      <h3>ボタン対応</h3>
+      <table>
+        <tbody>
+          <tr><td>Front short</td><td><code>A</code></td></tr>
+          <tr><td>Side short</td><td><code>B</code></td></tr>
+          <tr><td>Power short</td><td><code>P</code></td></tr>
+          <tr><td>Front hold</td><td><code>A-hold</code></td></tr>
+          <tr><td>Side hold</td><td><code>B-hold</code></td></tr>
+          <tr><td>Power hold</td><td><code>P-hold</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>状態色</h3>
+      <p><span class="led b"></span><strong>青</strong> — done</p>
+      <p><span class="led y"></span><strong>黄</strong> — waiting / decision needed</p>
+      <p><span class="led g"></span><strong>緑</strong> — running / working</p>
+      <p><span class="led r"></span><strong>赤</strong> — failed / disconnected</p>
     </div>
   </div>
 
   <h2>8. ロードマップ</h2>
   <div class="step"><div class="n">1</div><div><strong>状態ブリッジを安定化</strong> — MCPからのstatus/heartbeat/request_decisionをVS Codeビューへ表示。<span class="ok"> 実装済み</span></div></div>
-  <div class="step"><div class="n">2</div><div><strong>LAN discoveryを安定化</strong> — mDNS広告とM5Stack側の自動発見を実機ネットワークで検証。<span class="warn"> 検証中</span></div></div>
-  <div class="step"><div class="n">3</div><div><strong>decision responseを設計</strong> — OK/NGや選択肢をエージェントへ返す標準メッセージを追加。</div></div>
-  <div class="step"><div class="n">4</div><div><strong>入力UXを仕上げる</strong> — M5Stackのボタン、画面、トークン設定、再接続表示を実運用向けに整える。</div></div>
+  <div class="step"><div class="n">2</div><div><strong>LAN discoveryを安定化</strong> — mDNS広告とM5StickC側の自動発見を実機ネットワークで検証。<span class="ok"> 実機確認済み</span></div></div>
+  <div class="step"><div class="n">3</div><div><strong>device UI応答を実装</strong> — OK/NGや選択肢を物理ボタンから<code>uiAction</code>として返す。<span class="ok"> 実装済み</span></div></div>
+  <div class="step"><div class="n">4</div><div><strong>入力UXを仕上げる</strong> — トークン設定、再接続表示、長文ラベルの実機視認性を実運用向けに整える。</div></div>
 
   <footer>
-    Vibe Remote — Concept &amp; Device Spec v0.3 · MCP status hub + LAN discovery + M5Stack draft client
+    Vibe Remote — Concept &amp; Device Spec v0.4 · MCP status hub + device UI + M5StickC Plus2 client
   </footer>
 </div>
 <script>

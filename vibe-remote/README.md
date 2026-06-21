@@ -187,13 +187,16 @@ Available tools:
 
 - `vibe_remote_set_status`: set `running`, `waiting`, `done`, `failed`, or `idle`.
 - `vibe_remote_heartbeat`: refresh `running` while work continues.
-- `vibe_remote_request_decision`: show a human-decision prompt summary.
+- `vibe_remote_request_decision`: show a human-decision prompt summary and return `structuredContent.ui_id`.
+- `vibe_remote_show_ui`: show a small declarative UI with up to 3 fields and 3 actions, and return `structuredContent.ui_id`.
+- `vibe_remote_get_action`: wait for and read a selected device action. Defaults to a 60 second timeout; pass `timeout_seconds: 0` for immediate polling.
+- `vibe_remote_clear_ui`: clear the current declarative device UI.
 - `vibe_remote_clear_status`: mark the agent as idle.
 
 Suggested agent instruction:
 
 ```text
-While working, call vibe_remote_heartbeat every 60 seconds. Before asking the user for a decision, call vibe_remote_request_decision with a short summary and choices. On completion or failure, call vibe_remote_set_status.
+While working, call vibe_remote_heartbeat every 60 seconds. Before asking the user for a decision, call vibe_remote_request_decision with a short summary and choices, then call vibe_remote_get_action to wait for the device response. On completion or failure, call vibe_remote_set_status.
 ```
 
 ## Run In VS Code
