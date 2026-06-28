@@ -16,6 +16,8 @@ export function normalizeDeviceUi(
     return undefined;
   }
   const state = ui.state && isAgentStatus(ui.state) ? ui.state : 'waiting';
+  const mode = ui.mode === 'direct' ? 'direct' : 'menu';
+  const selected = Number.isFinite(ui.selected) && ui.selected! >= 0 ? Math.floor(ui.selected!) : 0;
   const ttlMs =
     Number.isFinite(ui.ttlMs) && ui.ttlMs! > 0 ? Math.min(ui.ttlMs!, 30 * 60 * 1000) : undefined;
   const expiresAt = ttlMs
@@ -27,6 +29,8 @@ export function normalizeDeviceUi(
     id,
     title: ui.title?.trim().slice(0, 32) || undefined,
     state,
+    mode,
+    selected,
     message: ui.message?.trim().slice(0, 120) || undefined,
     fields: Array.isArray(ui.fields)
       ? ui.fields
@@ -43,14 +47,14 @@ export function normalizeDeviceUi(
       : undefined,
     actions: Array.isArray(ui.actions)
       ? ui.actions
-          .slice(0, 3)
+          .slice(0, 6)
           .map((action) => ({
             id: String(action.id ?? '')
               .trim()
               .slice(0, 24),
             label: String(action.label ?? '')
               .trim()
-              .slice(0, 10),
+              .slice(0, 16),
             button: action.button
           }))
           .filter((action) => action.id && action.label)

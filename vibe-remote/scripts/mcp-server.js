@@ -79,7 +79,7 @@ const tools = [
   {
     name: 'vibe_remote_show_ui',
     description:
-      'Show a small declarative UI on Vibe Remote devices. Limits: title 32 chars, message 120 chars, up to 3 fields, up to 3 actions mapped to A/B/P or hold variants.',
+      'Show a small declarative UI on Vibe Remote devices. Default mode is menu: A selects, B moves to next item, P goes back/cancels. Use mode=direct only when actions must be mapped directly to buttons.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -89,6 +89,15 @@ const tools = [
           type: 'string',
           enum: ['running', 'waiting', 'done', 'failed', 'idle'],
           description: 'UI state color/mood.'
+        },
+        mode: {
+          type: 'string',
+          enum: ['menu', 'direct'],
+          description: 'menu: A select / B next / P back. direct: actions may map to A/B/P.'
+        },
+        selected: {
+          type: 'number',
+          description: 'Initial selected action index for menu mode.'
         },
         message: { type: 'string', description: 'Short body text, max 120 chars.' },
         fields: {
@@ -119,7 +128,7 @@ const tools = [
             required: ['id', 'label'],
             additionalProperties: false
           },
-          description: 'Up to 3 actions. Short labels work best: OK, NG, Retry.'
+          description: 'Up to 6 actions. Short labels work best: Run, Retry, Cancel.'
         },
         source: { type: 'string', description: 'Agent/source label. Defaults to codex.' },
         ttl_seconds: { type: 'number', description: 'How long the UI remains fresh.' }
@@ -229,7 +238,7 @@ async function handleRequest(method, params) {
       capabilities: { tools: {} },
       serverInfo: { name: 'vibe-remote', version: '0.1.0' },
       instructions:
-        'Use vibe_remote_heartbeat while working, vibe_remote_show_ui or vibe_remote_request_decision before asking the user for a choice, vibe_remote_get_action to read the device response, and vibe_remote_set_status when work completes or fails. Device UI supports title, state, message, up to 3 fields, and up to 3 actions mapped to A/B/P or hold variants.'
+        'Use vibe_remote_heartbeat while working, vibe_remote_show_ui or vibe_remote_request_decision before asking the user for a choice, vibe_remote_get_action to read the device response, and vibe_remote_set_status when work completes or fails. Device UI defaults to menu mode: A selects the highlighted item, B rotates the menu, and P returns/cancels.'
     };
   }
   if (method === 'tools/list') {
@@ -276,6 +285,8 @@ async function callTool(name, args) {
       id: uiId,
       title: 'Decision',
       state: 'waiting',
+      mode: 'menu',
+      selected: 0,
       message: args.message,
       actions: normalizeChoiceActions(args.choices),
       source: args.source,
@@ -294,6 +305,8 @@ async function callTool(name, args) {
       id: uiId,
       title: args.title,
       state: args.state || 'waiting',
+      mode: args.mode || 'menu',
+      selected: args.selected,
       message: args.message,
       fields: args.fields,
       actions: args.actions,
@@ -353,7 +366,7 @@ async function postStatus({ status, message, source, ttlSeconds }) {
   });
 }
 
-async function postDeviceUi({ id, title, state, message, fields, actions, source, ttlSeconds }) {
+async function postDeviceUi({ id, title, state, mode, selected, message, fields, actions, source, ttlSeconds }) {
   if (!DEFAULT_TOKEN) {
     throw new Error(
       'VIBE_REMOTE_TOKEN is required. Run "Vibe Remote: 接続トークンを表示" and configure it as an MCP env var.'
@@ -367,6 +380,8 @@ async function postDeviceUi({ id, title, state, message, fields, actions, source
       id,
       title,
       state,
+      mode,
+      selected,
       message,
       fields,
       actions,
@@ -432,19 +447,17 @@ async function clearDeviceUi({ uiId }) {
 function normalizeChoiceActions(choices) {
   if (!Array.isArray(choices) || choices.length === 0) {
     return [
-      { id: 'ok', label: 'OK', button: 'A' },
-      { id: 'ng', label: 'NG', button: 'B' }
+      { id: 'ok', label: 'OK' },
+      { id: 'cancel', label: 'Cancel' }
     ];
   }
-  const buttons = ['A', 'B', 'P'];
-  return choices.slice(0, 3).map((choice, index) => ({
+  return choices.slice(0, 6).map((choice, index) => ({
     id:
       String(choice)
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '_')
         .slice(0, 24) || `choice_${index + 1}`,
-    label: String(choice).slice(0, 10),
-    button: buttons[index]
+    label: String(choice).slice(0, 16)
   }));
 }
 

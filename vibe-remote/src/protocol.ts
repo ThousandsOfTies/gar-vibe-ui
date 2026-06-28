@@ -24,6 +24,7 @@ export interface AgentStatusMessage {
 }
 
 export type DeviceUiState = AgentRuntimeStatus;
+export type DeviceUiMode = 'menu' | 'direct';
 
 export interface DeviceUiAction {
   id: string;
@@ -40,6 +41,8 @@ export interface DeviceUiSpec {
   id: string;
   title?: string;
   state?: DeviceUiState;
+  mode?: DeviceUiMode;
+  selected?: number;
   message?: string;
   fields?: DeviceUiField[];
   actions?: DeviceUiAction[];

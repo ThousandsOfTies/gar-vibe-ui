@@ -149,6 +149,28 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
     if (a.taskRunning) extra.push('task');
     if (a.focused === false) extra.push('unfocused');
 
+    if (s.ui) {
+      const ui = s.ui;
+      const selected = Number.isFinite(ui.selected) ? ui.selected : 0;
+      const actions = Array.isArray(ui.actions) ? ui.actions : [];
+      const lines = [];
+      lines.push('<span class="needed">' + escapeHtml(ui.title || 'Device UI') + '</span>');
+      if (ui.message) lines.push(escapeHtml(ui.message));
+      if (Array.isArray(ui.fields)) {
+        for (const f of ui.fields.slice(0, 3)) {
+          lines.push('<span class="muted">' + escapeHtml(f.label || '') + '</span> ' + escapeHtml(f.value || ''));
+        }
+      }
+      for (let i = 0; i < actions.length; i++) {
+        const mark = i === selected ? '> ' : '  ';
+        const cls = i === selected ? 'ok' : 'muted';
+        lines.push('<span class="' + cls + '">' + mark + escapeHtml(actions[i].label || actions[i].id || '?') + '</span>');
+      }
+      lines.push('<span class="muted">A Select / B Next / P Back</span>');
+      document.getElementById('lcd').innerHTML = lines.join('<br>');
+      return;
+    }
+
     document.getElementById('lcd').innerHTML =
       header + '<br>' + agentLine + '<br>' + (cmdLine || '<span class="muted">no command</span>') + '<br>' + errLine + '<br>' + fileLine +
       (extra.length ? '<br><span class="muted">' + extra.join('  ') + '</span>' : '');

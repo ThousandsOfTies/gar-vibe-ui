@@ -48,6 +48,7 @@ constexpr uint32_t kWifiRetryIntervalMs = 10000;
 constexpr uint32_t kUiIntervalMs = 500;
 constexpr uint32_t kButtonHitLatchMs = 1200;
 constexpr uint32_t kButtonHoldMs = 900;
+constexpr int kMaxDeviceUiActions = 6;
 constexpr uint8_t kButtonAGpio = 37;
 constexpr uint8_t kButtonBGpio = 39;
 constexpr uint8_t kButtonPwrGpio = 35;
@@ -83,14 +84,16 @@ bool deviceUiActive = false;
 String deviceUiId;
 String deviceUiTitle;
 String deviceUiState = "waiting";
+String deviceUiMode = "menu";
 String deviceUiMessage;
 String deviceUiFieldLabels[3];
 String deviceUiFieldValues[3];
 int deviceUiFieldCount = 0;
-String deviceUiActionIds[3];
-String deviceUiActionLabels[3];
-String deviceUiActionButtons[3];
+String deviceUiActionIds[kMaxDeviceUiActions];
+String deviceUiActionLabels[kMaxDeviceUiActions];
+String deviceUiActionButtons[kMaxDeviceUiActions];
 int deviceUiActionCount = 0;
+int deviceUiSelected = 0;
 String lastLine = "boot";
 String lastSentStatus = "-";
 String serialRx;
@@ -240,6 +243,33 @@ void drawInfoRows(int width, const String& ipText, const String& hubText, const 
 
 void drawDeviceUiDetails(int width) {
   clearArea(7, 105, width - 14, 48);
+  if (deviceUiMode == "menu" && deviceUiActionCount > 0) {
+    M5.Display.setTextSize(1);
+    int row = 0;
+    if (deviceUiMessage.length() > 0) {
+      M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+      M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
+      row = 1;
+    }
+    int start = 0;
+    if (deviceUiActionCount > 3) {
+      start = deviceUiSelected <= 1 ? 0 : deviceUiSelected - 1;
+      if (start > deviceUiActionCount - 3) {
+        start = deviceUiActionCount - 3;
+      }
+    }
+    for (int index = start; index < deviceUiActionCount && row < 4; ++index, ++row) {
+      const bool selected = index == deviceUiSelected;
+      M5.Display.setTextColor(selected ? TFT_YELLOW : TFT_LIGHTGREY, TFT_BLACK);
+      M5.Display.drawString(
+        String(selected ? "> " : "  ") + deviceUiActionLabels[index].substring(0, 14),
+        7,
+        106 + row * 13
+      );
+    }
+    return;
+  }
+
   if (deviceUiFieldCount == 0 && deviceUiMessage.length() > 0) {
     drawWrappedText(deviceUiMessage, 7, 106, 18, 3, TFT_WHITE, TFT_BLACK);
     return;
@@ -289,6 +319,10 @@ String deviceUiDetailsSignature() {
     signature += ":";
     signature += deviceUiActionLabels[index];
   }
+  signature += "|mode=";
+  signature += deviceUiMode;
+  signature += "|sel=";
+  signature += String(deviceUiSelected);
   return signature;
 }
 
@@ -315,6 +349,17 @@ String actionLabelForButton(const String& button) {
 }
 
 String footerLine(const char* prefix, const String& button, const char* fallback) {
+  if (deviceUiActive && deviceUiMode == "menu") {
+    if (button == "A") {
+      return String(prefix) + "Select";
+    }
+    if (button == "B") {
+      return String(prefix) + "Next";
+    }
+    if (button == "P") {
+      return String(prefix) + "Back";
+    }
+  }
   String label = actionLabelForButton(button);
   if (label.length() == 0) {
     return String(prefix) + fallback;
@@ -463,7 +508,7 @@ void sendAgentStatus(const char* status, const char* message) {
 }
 
 bool findActionForButton(const String& button, String& actionIdOut, String& labelOut) {
-  if (!deviceUiActive) {
+  if (!deviceUiActive || deviceUiMode == "menu") {
     return false;
   }
   for (int index = 0; index < deviceUiActionCount; ++index) {
@@ -476,12 +521,7 @@ bool findActionForButton(const String& button, String& actionIdOut, String& labe
   return false;
 }
 
-bool sendUiActionForButton(const String& button) {
-  String actionId;
-  String label;
-  if (!findActionForButton(button, actionId, label)) {
-    return false;
-  }
+bool sendUiAction(const String& actionId, const String& label, const String& button) {
   JsonDocument doc;
   doc["type"] = "uiAction";
   doc["token"] = kToken;
@@ -492,6 +532,48 @@ bool sendUiActionForButton(const String& button) {
   sendDoc(doc);
   latchButtonHit(label.c_str());
   mark(String("ui: ") + label);
+  return true;
+}
+
+bool sendUiActionForButton(const String& button) {
+  String actionId;
+  String label;
+  if (!findActionForButton(button, actionId, label)) {
+    return false;
+  }
+  return sendUiAction(actionId, label, button);
+}
+
+bool sendSelectedDeviceUiAction(const String& button) {
+  if (!deviceUiActive || deviceUiMode != "menu" || deviceUiActionCount <= 0) {
+    return false;
+  }
+  if (deviceUiSelected < 0 || deviceUiSelected >= deviceUiActionCount) {
+    deviceUiSelected = 0;
+  }
+  return sendUiAction(deviceUiActionIds[deviceUiSelected], deviceUiActionLabels[deviceUiSelected], button);
+}
+
+bool sendBackDeviceUiAction(const String& button) {
+  if (!deviceUiActive || deviceUiMode != "menu") {
+    return false;
+  }
+  for (int index = 0; index < deviceUiActionCount; ++index) {
+    const String id = deviceUiActionIds[index];
+    if (id == "back" || id == "cancel" || id == "no" || id == "ng") {
+      return sendUiAction(deviceUiActionIds[index], deviceUiActionLabels[index], button);
+    }
+  }
+  return sendUiAction("back", "Back", button);
+}
+
+bool selectNextDeviceUiAction() {
+  if (!deviceUiActive || deviceUiMode != "menu" || deviceUiActionCount <= 0) {
+    return false;
+  }
+  deviceUiSelected = (deviceUiSelected + 1) % deviceUiActionCount;
+  latchButtonHit(deviceUiActionLabels[deviceUiSelected].c_str());
+  displayDirty = true;
   return true;
 }
 
@@ -518,6 +600,10 @@ void applyState(JsonDocument& doc) {
     deviceUiId = nextUiId;
     deviceUiTitle = ui["title"] | "UI";
     deviceUiState = ui["state"] | "waiting";
+    deviceUiMode = ui["mode"] | "menu";
+    if (deviceUiMode != "direct") {
+      deviceUiMode = "menu";
+    }
     deviceUiMessage = ui["message"] | "";
     deviceUiFieldCount = 0;
     JsonArray fields = ui["fields"].as<JsonArray>();
@@ -537,7 +623,7 @@ void applyState(JsonDocument& doc) {
     deviceUiActionCount = 0;
     JsonArray actions = ui["actions"].as<JsonArray>();
     for (JsonObject action : actions) {
-      if (deviceUiActionCount >= 3) {
+      if (deviceUiActionCount >= kMaxDeviceUiActions) {
         break;
       }
       String id = action["id"] | "";
@@ -554,15 +640,19 @@ void applyState(JsonDocument& doc) {
       deviceUiActionButtons[deviceUiActionCount] = button;
       ++deviceUiActionCount;
     }
+    int selected = ui["selected"] | deviceUiSelected;
+    deviceUiSelected = selected >= 0 && selected < deviceUiActionCount ? selected : 0;
   } else if (deviceUiActive) {
     Serial.println("ui cleared");
     deviceUiActive = false;
     deviceUiId = "";
     deviceUiTitle = "";
     deviceUiState = "waiting";
+    deviceUiMode = "menu";
     deviceUiMessage = "";
     deviceUiFieldCount = 0;
     deviceUiActionCount = 0;
+    deviceUiSelected = 0;
   }
   displayDirty = true;
 }
@@ -792,7 +882,7 @@ void pollButtons() {
   }
   if (!directA && lastDirectA) {
     if (!buttonAHoldSent) {
-      if (!sendUiActionForButton("A")) {
+      if (!sendSelectedDeviceUiAction("A") && !sendUiActionForButton("A")) {
         latchButtonHit("A");
         sendAgentStatus("running", "gpio37 A");
       }
@@ -813,7 +903,7 @@ void pollButtons() {
   }
   if (!directB && lastDirectB) {
     if (!buttonBHoldSent) {
-      if (!sendUiActionForButton("B")) {
+      if (!selectNextDeviceUiAction() && !sendUiActionForButton("B")) {
         latchButtonHit("B");
         sendAgentStatus("waiting", "gpio39 B");
       }
@@ -834,7 +924,7 @@ void pollButtons() {
   }
   if (!directPwr && lastDirectPwr) {
     if (!buttonPwrHoldSent) {
-      if (!sendUiActionForButton("P")) {
+      if (!sendBackDeviceUiAction("P") && !sendUiActionForButton("P")) {
         latchButtonHit("P");
         sendAgentStatus("done", "gpio35 PWR");
       }
