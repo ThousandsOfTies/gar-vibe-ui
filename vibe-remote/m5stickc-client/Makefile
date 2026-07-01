@@ -15,7 +15,7 @@ APP_SRC_FILES := $(shell find src -maxdepth 2 -type f 2>/dev/null)
 LOCAL_CONFIG := $(wildcard .env.local)
 BUILD_INPUTS := platformio.ini scripts/apply_local_config.py scripts/vm_build_and_package.sh $(LOCAL_CONFIG) $(APP_SRC_FILES)
 
-.PHONY: FORCE build upload monitor vm-package artifact-latest install-artifact flash wokwi-workspace wokwi-build wokwi-clean
+.PHONY: FORCE build upload monitor vm-package check-real-config artifact-latest install-artifact flash wokwi-workspace wokwi-build wokwi-clean
 
 FORCE:
 
@@ -48,7 +48,21 @@ wokwi-clean:
 vm-package:
 	./scripts/vm_build_and_package.sh "$(PIO_ENV)"
 
-$(ARTIFACT_STAMP): $(BUILD_INPUTS)
+check-real-config:
+	@if [ -z "$${VIBE_WIFI_SSID:-}" ] && ! grep -Eq '^VIBE_WIFI_SSID=.+' .env.local 2>/dev/null; then \
+		echo "VIBE_WIFI_SSID is required for real-device firmware. Set it in .env.local or the environment."; \
+		exit 1; \
+	fi
+	@if [ -z "$${VIBE_WIFI_PASS:-}" ] && ! grep -Eq '^VIBE_WIFI_PASS=.+' .env.local 2>/dev/null; then \
+		echo "VIBE_WIFI_PASS is required for real-device firmware. Set it in .env.local or the environment."; \
+		exit 1; \
+	fi
+	@if [ -z "$${VIBE_REMOTE_TOKEN:-}" ] && ! grep -Eq '^VIBE_REMOTE_TOKEN=.+' .env.local 2>/dev/null; then \
+		echo "VIBE_REMOTE_TOKEN is required for real-device firmware. Set it in .env.local or the environment."; \
+		exit 1; \
+	fi
+
+$(ARTIFACT_STAMP): check-real-config $(BUILD_INPUTS)
 	./scripts/vm_build_and_package.sh "$(PIO_ENV)" | tee .gar-artifact-package.log
 	@awk -F'Artifact: ' '/^Artifact: / { artifact=$$2 } END { if (!artifact) exit 1; print artifact }' .gar-artifact-package.log > "$@"
 

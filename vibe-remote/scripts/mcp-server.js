@@ -13,10 +13,23 @@ const ACTION_POLL_INTERVAL_MS = Number(process.env.VIBE_REMOTE_ACTION_POLL_INTER
 let remoteClient;
 let requestQueue = Promise.resolve();
 
+const AGENT_USAGE_POLICY = [
+  'Usage policy for agents:',
+  '- At the start of any non-trivial task, call vibe_remote_set_status with status="running".',
+  '- While working for more than 30 seconds, call vibe_remote_heartbeat every 30-60 seconds.',
+  '- Before asking the user for a decision, call vibe_remote_request_decision with concise choices.',
+  '- After requesting a decision, call vibe_remote_get_action for that ui_id and continue from the selected action.',
+  '- After receiving a decision action, call vibe_remote_clear_ui for that ui_id.',
+  '- When work completes, call vibe_remote_set_status with status="done" briefly, then vibe_remote_clear_status.',
+  '- On failure or a blocker, call vibe_remote_set_status with status="failed" or status="waiting" and a short reason.',
+  'Device UI defaults to menu mode: A selects the highlighted item, B rotates the menu, and P returns/cancels.'
+].join('\n');
+
 const tools = [
   {
     name: 'vibe_remote_set_status',
-    description: 'Report the current agent status to Vibe Remote.',
+    description:
+      'Report the current agent status to Vibe Remote. Use status="running" at the start of non-trivial work, "waiting" before user input, "done" when complete, "failed" when blocked or failed, and "idle" only when the agent is no longer active.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -35,7 +48,8 @@ const tools = [
   },
   {
     name: 'vibe_remote_heartbeat',
-    description: 'Refresh Vibe Remote with a running heartbeat while the agent is working.',
+    description:
+      'Refresh Vibe Remote with a running heartbeat while the agent is working. For tasks longer than 30 seconds, call this every 30-60 seconds so the device does not show stale or idle state.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -48,7 +62,8 @@ const tools = [
   },
   {
     name: 'vibe_remote_request_decision',
-    description: 'Tell Vibe Remote that the agent is waiting for a human decision.',
+    description:
+      'Tell Vibe Remote that the agent is waiting for a human decision. Call this before asking the user to choose, provide concise choices when possible, then call vibe_remote_get_action with the returned ui_id before proceeding.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -79,7 +94,7 @@ const tools = [
   {
     name: 'vibe_remote_show_ui',
     description:
-      'Show a small declarative UI on Vibe Remote devices. Default mode is menu: A selects, B moves to next item, P goes back/cancels. Use mode=direct only when actions must be mapped directly to buttons.',
+      'Show a small declarative UI on Vibe Remote devices. Default mode is menu: A selects, B moves to next item, P goes back/cancels. Use mode=direct only when actions must be mapped directly to buttons. If the UI asks for a user action, call vibe_remote_get_action for the same UI id and clear it after the action is received.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -149,7 +164,8 @@ const tools = [
   },
   {
     name: 'vibe_remote_get_action',
-    description: 'Read the latest action selected on a Vibe Remote device.',
+    description:
+      'Read the latest action selected on a Vibe Remote device. Use this after vibe_remote_request_decision or an interactive vibe_remote_show_ui, preferably filtered by ui_id, and continue the task based on the returned action.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -169,7 +185,8 @@ const tools = [
   },
   {
     name: 'vibe_remote_clear_ui',
-    description: 'Clear the small declarative UI from Vibe Remote devices.',
+    description:
+      'Clear the small declarative UI from Vibe Remote devices. Call this after an action has been received or when a pending UI is no longer relevant.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -180,7 +197,8 @@ const tools = [
   },
   {
     name: 'vibe_remote_clear_status',
-    description: 'Clear or mark the agent status as idle on Vibe Remote.',
+    description:
+      'Clear or mark the agent status as idle on Vibe Remote. Call this after completion once any brief done/final status has been posted.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -237,8 +255,7 @@ async function handleRequest(method, params) {
       protocolVersion: params.protocolVersion || '2025-11-25',
       capabilities: { tools: {} },
       serverInfo: { name: 'vibe-remote', version: '0.1.0' },
-      instructions:
-        'Use vibe_remote_heartbeat while working, vibe_remote_show_ui or vibe_remote_request_decision before asking the user for a choice, vibe_remote_get_action to read the device response, and vibe_remote_set_status when work completes or fails. Device UI defaults to menu mode: A selects the highlighted item, B rotates the menu, and P returns/cancels.'
+      instructions: AGENT_USAGE_POLICY
     };
   }
   if (method === 'tools/list') {
