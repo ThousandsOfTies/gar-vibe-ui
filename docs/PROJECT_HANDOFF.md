@@ -117,7 +117,7 @@ M5StickC display contract:
 
 Main firmware file:
 
-`vibe-remote/m5stack-client/src/minimal_vibe_remote.cpp`
+`vibe-remote/m5stickc-client/src/main.cpp`
 
 PlatformIO env:
 
@@ -290,7 +290,7 @@ cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote
 Build/flash M5StickC firmware locally:
 
 ```bash
-cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote/m5stack-client
+cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote/m5stickc-client
 .tools/platformio/bin/platformio run -e m5stickc-plus2-vibe-min
 .tools/platformio/bin/platformio run -e m5stickc-plus2-vibe-min -t upload --upload-port /dev/ttyACM0
 ```

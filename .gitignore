@@ -7,7 +7,8 @@ dist/
 vibe-remote/node_modules/
 vibe-remote/dist/
 vibe-remote/.tools/
-vibe-remote/m5stack-client/artifacts/
-vibe-remote/m5stack-client/.env.local
-vibe-remote/m5stack-client/.pio/
+vibe-remote/m5stickc-client/artifacts/
+vibe-remote/m5stickc-client/.env.local
+vibe-remote/m5stickc-client/.pio/
+vibe-remote/m5stickc-client/.tools/
 **/__pycache__/

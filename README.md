@@ -21,7 +21,7 @@ advertizement.png           Temporary concept image for the promotional document
 - Token-protected WebSocket status channel is implemented.
 - VS Code status viewer is implemented.
 - mDNS advertisement for LAN device discovery is implemented.
-- M5Stack client draft is implemented under `vibe-remote/m5stack-client`.
+- M5StickC client firmware is implemented under `vibe-remote/m5stickc-client`.
 - The earlier VS Code command-control direction has been removed.
 
 ## Build
@@ -45,12 +45,13 @@ To let a LAN device discover the VS Code bridge:
 
 The mDNS advertisement publishes endpoint metadata only. The token is never advertised.
 
-## M5Stack Draft Client
+## M5StickC Client
 
-The draft client can connect over Wi-Fi, discover `_vibe-remote._tcp.local`, open a WebSocket, send `hello` / `ping`, and report simple statuses from hardware buttons.
+The M5StickC client can connect over Wi-Fi, discover `_vibe-remote._tcp.local`,
+open a WebSocket, render device UI payloads, and send A / B / P button actions.
 
 ```bash
-cd vibe-remote/m5stack-client
+cd vibe-remote/m5stickc-client
 pio run
 pio run -t upload
 pio device monitor
@@ -62,5 +63,5 @@ For the VM-to-device flow, `make vm-package` creates a checksumed firmware artif
 
 1. Configure the MCP bridge in the agent runtime.
 2. Verify status reporting against the VS Code status viewer.
-3. Test mDNS discovery and WebSocket connection on real M5Stack hardware.
+3. Test mDNS discovery and WebSocket connection on real M5StickC hardware.
 4. Design the decision response path for OK/NG and choice selection.

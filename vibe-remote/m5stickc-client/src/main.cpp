@@ -49,9 +49,15 @@ constexpr uint32_t kUiIntervalMs = 500;
 constexpr uint32_t kButtonHitLatchMs = 1200;
 constexpr uint32_t kButtonHoldMs = 900;
 constexpr int kMaxDeviceUiActions = 6;
+#if defined(VIBE_WOKWI)
+constexpr uint8_t kButtonAGpio = 32;
+constexpr uint8_t kButtonBGpio = 33;
+constexpr uint8_t kButtonPwrGpio = 27;
+#else
 constexpr uint8_t kButtonAGpio = 37;
 constexpr uint8_t kButtonBGpio = 39;
 constexpr uint8_t kButtonPwrGpio = 35;
+#endif
 
 const char* kSsid = VIBE_WIFI_SSID;
 const char* kPass = VIBE_WIFI_PASS;
@@ -113,6 +119,7 @@ String buttonHit = "-";
 unsigned long buttonHitUntil = 0;
 bool lastDrawnWifiReady = false;
 bool lastDrawnWsReady = false;
+int lastDrawnBatteryPercent = -1;
 String lastDrawnIp;
 String lastDrawnHub;
 String lastDrawnChat;
@@ -127,6 +134,13 @@ void mark(const String& line) {
   lastLine = line;
   displayDirty = true;
   Serial.println(line);
+}
+
+void markIfChanged(const String& line) {
+  if (lastLine == line) {
+    return;
+  }
+  mark(line);
 }
 
 void latchButtonHit(const char* label) {
@@ -155,10 +169,24 @@ uint16_t connectionColor(bool ok) {
   return ok ? TFT_GREEN : TFT_RED;
 }
 
+uint16_t batteryColor(int percent) {
+  if (percent <= 20) {
+    return TFT_RED;
+  }
+  if (percent <= 45) {
+    return TFT_YELLOW;
+  }
+  return TFT_GREEN;
+}
+
 String upperStatus(const String& status) {
   String value = status;
   value.toUpperCase();
   return value;
+}
+
+String gpioMessage(uint8_t gpio, const char* label) {
+  return String("gpio") + String(gpio) + " " + label;
 }
 
 void drawChip(int x, int y, const char* label, bool ok) {
@@ -170,6 +198,34 @@ void drawChip(int x, int y, const char* label, bool ok) {
   M5.Display.fillCircle(x + 8, y + 7, 3, color);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.drawString(label, x + 15, y + 4);
+}
+
+int batteryPercent() {
+  int percent = M5.Power.getBatteryLevel();
+  if (percent < 0) {
+    percent = 0;
+  }
+  if (percent > 100) {
+    percent = 100;
+  }
+  return percent;
+}
+
+void drawBattery(int x, int y, int percent) {
+  const int bodyW = 20;
+  const int bodyH = 12;
+  const uint16_t color = batteryColor(percent);
+  M5.Display.fillRect(x - 2, y - 1, bodyW + 13, bodyH + 4, TFT_DARKGREY);
+  M5.Display.drawRect(x, y, bodyW, bodyH, TFT_WHITE);
+  M5.Display.fillRect(x + bodyW, y + 4, 2, 4, TFT_WHITE);
+  M5.Display.fillRect(x + 2, y + 2, bodyW - 4, bodyH - 4, TFT_BLACK);
+  const int fillW = ((bodyW - 4) * percent) / 100;
+  if (fillW > 0) {
+    M5.Display.fillRect(x + 2, y + 2, fillW, bodyH - 4, color);
+  }
+  M5.Display.setTextSize(1);
+  M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREY);
+  M5.Display.drawString(String(percent), x + bodyW + 5, y + 2);
 }
 
 void drawStaticFrame() {
@@ -404,11 +460,13 @@ void drawUi() {
   const String hit = millis() < buttonHitUntil ? buttonHit : "";
   const String ipText = wifiReady ? WiFi.localIP().toString() : String("down(") + String(WiFi.status()) + ")";
   const String hubText = remoteHost.length() ? remoteHost + ":" + String(remotePort) : "searching";
+  const int batPercent = batteryPercent();
 
   if (!uiFrameDrawn) {
     drawStaticFrame();
     lastDrawnWifiReady = !wifiReady;
     lastDrawnWsReady = !wsReady;
+    lastDrawnBatteryPercent = -1;
     lastDrawnIp = "";
     lastDrawnHub = "";
     lastDrawnChat = "";
@@ -427,6 +485,10 @@ void drawUi() {
   if (wsReady != lastDrawnWsReady) {
     drawChip(width - 45, 4, "WS", wsReady);
     lastDrawnWsReady = wsReady;
+  }
+  if (batPercent != lastDrawnBatteryPercent) {
+    drawBattery(51, 5, batPercent);
+    lastDrawnBatteryPercent = batPercent;
   }
   const bool detailDirty =
     ipText != lastDrawnIp ||
@@ -700,11 +762,11 @@ void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
 
 bool hasRequiredConfig() {
   if (strlen(kSsid) == 0 || strlen(kPass) == 0) {
-    mark("missing wifi config");
+    markIfChanged("missing wifi config");
     return false;
   }
   if (strlen(kToken) == 0) {
-    mark("missing token");
+    markIfChanged("missing token");
     return false;
   }
   return true;
@@ -877,14 +939,14 @@ void pollButtons() {
     buttonAHoldSent = true;
     if (!sendUiActionForButton("A-hold")) {
       latchButtonHit("A hold");
-      sendAgentStatus("failed", "gpio37 A hold");
+      sendAgentStatus("failed", gpioMessage(kButtonAGpio, "A hold").c_str());
     }
   }
   if (!directA && lastDirectA) {
     if (!buttonAHoldSent) {
       if (!sendSelectedDeviceUiAction("A") && !sendUiActionForButton("A")) {
         latchButtonHit("A");
-        sendAgentStatus("running", "gpio37 A");
+        sendAgentStatus("running", gpioMessage(kButtonAGpio, "A").c_str());
       }
     }
     buttonAPressedAt = 0;
@@ -898,14 +960,14 @@ void pollButtons() {
     buttonBHoldSent = true;
     if (!sendUiActionForButton("B-hold")) {
       latchButtonHit("B hold");
-      sendAgentStatus("idle", "gpio39 B hold");
+      sendAgentStatus("idle", gpioMessage(kButtonBGpio, "B hold").c_str());
     }
   }
   if (!directB && lastDirectB) {
     if (!buttonBHoldSent) {
       if (!selectNextDeviceUiAction() && !sendUiActionForButton("B")) {
         latchButtonHit("B");
-        sendAgentStatus("waiting", "gpio39 B");
+        sendAgentStatus("waiting", gpioMessage(kButtonBGpio, "B").c_str());
       }
     }
     buttonBPressedAt = 0;
@@ -926,7 +988,7 @@ void pollButtons() {
     if (!buttonPwrHoldSent) {
       if (!sendBackDeviceUiAction("P") && !sendUiActionForButton("P")) {
         latchButtonHit("P");
-        sendAgentStatus("done", "gpio35 PWR");
+        sendAgentStatus("done", gpioMessage(kButtonPwrGpio, "PWR").c_str());
       }
     }
     buttonPwrPressedAt = 0;

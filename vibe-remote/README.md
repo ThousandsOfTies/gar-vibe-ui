@@ -8,7 +8,7 @@ This package runs a local status bridge. MCP-capable agents report their own sta
 - Token-protected WebSocket status channel.
 - MCP stdio server for agent status reports.
 - State updates for activity, diagnostics, active file, tasks, debug sessions, and focus state.
-- Optional Bluetooth Classic SPP transport via OS serial ports for Core2-class M5Stack devices.
+- Optional Bluetooth Classic SPP bridge support for future Core2-class M5Stack clients.
 - `idle` means no observable VS Code activity; chat/agent prompts are not exposed by stable VS Code APIs unless the agent reports them.
 
 ## Commands
@@ -56,11 +56,11 @@ Security notes:
 
 ## Bluetooth SPP
 
-For M5Stack Core2-class devices with Bluetooth Classic, Vibe Remote can also use
-SPP as a serial transport. The protocol is the same JSON payloads as the
-WebSocket transport, framed as newline-delimited JSON.
+For future M5Stack Core2-class clients with Bluetooth Classic, Vibe Remote can
+also use SPP as a serial transport. The protocol is the same JSON payloads as
+the WebSocket transport, framed as newline-delimited JSON.
 
-1. Build the M5Stack client with `-D VIBE_TRANSPORT_SPP=1`.
+1. Build a Core2-class M5Stack client with `-D VIBE_TRANSPORT_SPP=1`.
 2. Pair the M5Stack from the OS Bluetooth settings.
 3. Set `vibeRemote.sppEnabled = true`.
 4. Set `vibeRemote.sppPort` to the paired serial port, for example `COM5` or `/dev/rfcomm0`.
@@ -76,7 +76,7 @@ local OS and let it proxy device traffic into the WSL Vibe Remote server.
 Default shape:
 
 ```text
-M5Stack -> Windows LAN/mDNS/ws://PC:39273 -> local bridge -> ws://127.0.0.1:39271 -> WSL extension
+M5StickC -> Windows LAN/mDNS/ws://PC:39273 -> local bridge -> ws://127.0.0.1:39271 -> WSL extension
 ```
 
 Start the Vibe Remote server in WSL with the safer local bind:

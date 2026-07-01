@@ -23,7 +23,6 @@ STRING_DEFINES = (
     "VIBE_REMOTE_HOST",
 )
 INTEGER_DEFINES = ("VIBE_REMOTE_PORT",)
-BOOLEAN_DEFINES = ("VIBE_TRANSPORT_SPP",)
 
 
 def _parse_env_line(line: str) -> tuple[str, str] | None:
@@ -63,11 +62,6 @@ for key in INTEGER_DEFINES:
     value = os.environ.get(key, local_values.get(key))
     if value:
         cpp_defines.append((key, int(value)))
-
-for key in BOOLEAN_DEFINES:
-    value = os.environ.get(key, local_values.get(key))
-    if value and value.lower() not in ("0", "false", "no", "off"):
-        cpp_defines.append((key, 1))
 
 if cpp_defines:
     env.Append(CPPDEFINES=cpp_defines)  # type: ignore[name-defined]

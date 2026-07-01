@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PIO_ENV="${1:-m5stack-core2}"
+PIO_ENV="${1:-m5stickc-plus2-vibe-min}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.pio/build/$PIO_ENV"
 STAMP="$(date +%Y%m%d-%H%M%S)"
