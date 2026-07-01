@@ -939,14 +939,12 @@ void pollButtons() {
     buttonAHoldSent = true;
     if (!sendUiActionForButton("A-hold")) {
       latchButtonHit("A hold");
-      sendAgentStatus("failed", gpioMessage(kButtonAGpio, "A hold").c_str());
     }
   }
   if (!directA && lastDirectA) {
     if (!buttonAHoldSent) {
       if (!sendSelectedDeviceUiAction("A") && !sendUiActionForButton("A")) {
         latchButtonHit("A");
-        sendAgentStatus("running", gpioMessage(kButtonAGpio, "A").c_str());
       }
     }
     buttonAPressedAt = 0;
@@ -960,14 +958,12 @@ void pollButtons() {
     buttonBHoldSent = true;
     if (!sendUiActionForButton("B-hold")) {
       latchButtonHit("B hold");
-      sendAgentStatus("idle", gpioMessage(kButtonBGpio, "B hold").c_str());
     }
   }
   if (!directB && lastDirectB) {
     if (!buttonBHoldSent) {
       if (!selectNextDeviceUiAction() && !sendUiActionForButton("B")) {
         latchButtonHit("B");
-        sendAgentStatus("waiting", gpioMessage(kButtonBGpio, "B").c_str());
       }
     }
     buttonBPressedAt = 0;
@@ -988,7 +984,6 @@ void pollButtons() {
     if (!buttonPwrHoldSent) {
       if (!sendBackDeviceUiAction("P") && !sendUiActionForButton("P")) {
         latchButtonHit("P");
-        sendAgentStatus("done", gpioMessage(kButtonPwrGpio, "PWR").c_str());
       }
     }
     buttonPwrPressedAt = 0;
