@@ -1,15 +1,15 @@
 # Vibe Remote Status Bridge
 
-This package runs a local status bridge. MCP-capable agents report their own state to a token-protected WebSocket server, and the VS Code view displays that state alongside observable editor activity.
+This package runs a local Vibe Remote bridge. It watches VS Code approval UI with Windows UI Automation and mirrors pending bash approvals to a physical Vibe Remote device.
 
 ## Features
 
 - VS Code status viewer for local testing.
 - Token-protected WebSocket status channel.
-- MCP stdio server for agent status reports.
+- Windows UI Automation approval broker for VS Code `Run bash command?` prompts.
 - State updates for activity, diagnostics, active file, tasks, debug sessions, and focus state.
 - Optional Bluetooth Classic SPP bridge support for future Core2-class M5Stack clients.
-- `idle` means no observable VS Code activity; chat/agent prompts are not exposed by stable VS Code APIs unless the agent reports them.
+- `idle` means no observable VS Code activity; chat/agent prompts are not exposed by stable VS Code APIs unless the approval broker detects host UI.
 
 ## Commands
 
@@ -38,6 +38,13 @@ This package runs a local status bridge. MCP-capable agents report their own sta
 - `vibeRemote.localBridge.upstreamPort`
 - `vibeRemote.localBridge.advertiseHost`
 - `vibeRemote.localBridge.logPath`
+- `vibeRemote.approvalBroker.enabled`
+- `vibeRemote.approvalBroker.dryRun`
+- `vibeRemote.approvalBroker.host`
+- `vibeRemote.approvalBroker.port`
+- `vibeRemote.approvalBroker.pollSeconds`
+- `vibeRemote.approvalBroker.decisionTimeoutSeconds`
+- `vibeRemote.approvalBroker.logPath`
 
 ## Auto Discovery (mDNS)
 
@@ -160,48 +167,74 @@ Default pseudo-dev directory:
 Useful controls:
 
 ```bash
-echo press > /tmp/gar-vibe-remote-device/button_a  # running
-echo press > /tmp/gar-vibe-remote-device/button_b  # waiting
-echo press > /tmp/gar-vibe-remote-device/button_c  # done
-echo hold  > /tmp/gar-vibe-remote-device/hold_a    # failed
-echo hold  > /tmp/gar-vibe-remote-device/hold_b    # idle
+echo press > /tmp/gar-vibe-remote-device/button_a  # select / confirm current UI action
+echo press > /tmp/gar-vibe-remote-device/button_b  # rotate menu selection
+echo press > /tmp/gar-vibe-remote-device/button_c  # back / cancel current UI
+echo hold  > /tmp/gar-vibe-remote-device/hold_a    # A-hold UI action when defined
+echo hold  > /tmp/gar-vibe-remote-device/hold_b    # B-hold UI action when defined
+echo hold  > /tmp/gar-vibe-remote-device/hold_c    # reconnect
 cat /tmp/gar-vibe-remote-device/screen.txt
 tail -f /tmp/gar-vibe-remote-device/events.log
 ```
 
-## MCP Status Bridge
+## VS Code Approval Broker
 
-Vibe Remote includes a small stdio MCP server that lets an MCP-capable agent report its own status to the remote display.
+`scripts/vscode-approval-broker.ps1` is a Windows UI Automation
+broker for approvals that are owned by the VS Code host UI, such as a pending
+`Run bash command?` confirmation. It watches the VS Code accessibility tree,
+mirrors a detected bash approval to Vibe Remote, waits for `Allow` / `Skip`, and
+then invokes the matching VS Code button.
 
-1. Start the VS Code extension and run `Vibe Remote: 接続トークンを表示`.
-2. Add an MCP server entry to Codex `config.toml`:
+Commands:
 
-```toml
-[mcp_servers.vibe_remote]
-command = "/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/node.sh"
-args = ["/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/mcp-server.js"]
-env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }
+- `Vibe Remote: Approval Brokerを開始`
+- `Vibe Remote: Approval Brokerを停止`
+- `Vibe Remote: Approval Brokerの状態を表示`
+
+Default settings are conservative:
+
+```json
+{
+  "vibeRemote.approvalBroker.enabled": false,
+  "vibeRemote.approvalBroker.dryRun": true,
+  "vibeRemote.approvalBroker.host": "127.0.0.1",
+  "vibeRemote.approvalBroker.port": 39273
+}
 ```
 
-Available tools:
+In WSL/Remote setups, the broker runs on Windows and normally connects through
+the Local Bridge at `127.0.0.1:39273`. Keep `dryRun` enabled until detection and
+Vibe Remote actions have been verified. When `dryRun` is disabled, selecting
+`Allow` or `Skip` on Vibe Remote invokes the matching VS Code approval button.
 
-- `vibe_remote_set_status`: set `running`, `waiting`, `done`, `failed`, or `idle`.
-- `vibe_remote_heartbeat`: refresh `running` while work continues.
-- `vibe_remote_request_decision`: show a human-decision prompt summary and return `structuredContent.ui_id`.
-- `vibe_remote_show_ui`: show a small declarative menu UI and return `structuredContent.ui_id`. On M5StickC-class devices, A selects, B rotates the menu, and P returns/cancels.
-- `vibe_remote_get_action`: wait for and read a selected device action. Defaults to a 60 second timeout; pass `timeout_seconds: 0` for immediate polling.
-- `vibe_remote_clear_ui`: clear the current declarative device UI.
-- `vibe_remote_clear_status`: mark the agent as idle.
+Manual debugging is still possible from Windows PowerShell, or from WSL through
+`powershell.exe`:
 
-Suggested agent instruction:
-
-```text
-While working, call vibe_remote_heartbeat every 60 seconds. Before asking the user for a decision, call vibe_remote_request_decision with a short summary and choices. The device shows a menu where A selects, B moves to the next choice, and P cancels/backs out. Then call vibe_remote_get_action to wait for the device response. On completion or failure, call vibe_remote_set_status.
+```powershell
+$env:VIBE_REMOTE_TOKEN = "YOUR_TOKEN"
+$env:VIBE_REMOTE_HOST = "127.0.0.1"
+$env:VIBE_REMOTE_PORT = "39273"
+& "\\wsl.localhost\Ubuntu-26.04\home\user\Yurufuwa\gar-vibe-ui\vibe-remote\scripts\vscode-approval-broker.ps1" -Loop
 ```
+
+For a safe probe that does not press VS Code buttons:
+
+```powershell
+& "\\wsl.localhost\Ubuntu-26.04\home\user\Yurufuwa\gar-vibe-ui\vibe-remote\scripts\vscode-approval-broker.ps1" -DryRun
+```
+
+Safety notes:
+
+- The broker only handles approvals where enabled `Allow` and `Skip` buttons are
+  visible in a VS Code window and the document text contains `Run bash command?`.
+- It re-finds the pending approval immediately before pressing a button.
+- `Cancel` or timeout clears the Vibe Remote UI and leaves VS Code untouched.
+- Keep `-DryRun` on until the pending approval shape has been confirmed on the
+  target machine.
 
 ## Run In VS Code
 
 1. Open the `vibe-remote` folder in VS Code.
 2. Press F5 to start an Extension Development Host.
 3. Run `Vibe Remote: 状態ビューアを開く` from the command palette.
-4. Use the MCP bridge or smoke script to verify status updates.
+4. Use the smoke script or Approval Broker to verify status updates.

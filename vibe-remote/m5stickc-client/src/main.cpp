@@ -82,6 +82,10 @@ unsigned long lastUiAt = 0;
 
 String remoteHost;
 uint16_t remotePort = kFallbackPort;
+bool wsStarted = false;
+String wsStartedHost;
+uint16_t wsStartedPort = 0;
+String wsPhase = "off";
 String chatState = "idle";
 String agentSource = "-";
 String agentStatus = "idle";
@@ -100,6 +104,9 @@ String deviceUiActionLabels[kMaxDeviceUiActions];
 String deviceUiActionButtons[kMaxDeviceUiActions];
 int deviceUiActionCount = 0;
 int deviceUiSelected = 0;
+String pendingUiId;
+String pendingActionLabel;
+unsigned long pendingActionUntil = 0;
 String lastLine = "boot";
 String lastSentStatus = "-";
 String serialRx;
@@ -119,6 +126,7 @@ String buttonHit = "-";
 unsigned long buttonHitUntil = 0;
 bool lastDrawnWifiReady = false;
 bool lastDrawnWsReady = false;
+String lastDrawnWsPhase;
 int lastDrawnBatteryPercent = -1;
 String lastDrawnIp;
 String lastDrawnHub;
@@ -149,6 +157,20 @@ void latchButtonHit(const char* label) {
   displayDirty = true;
 }
 
+void latchPendingAction(const String& uiId, const String& label) {
+  pendingUiId = uiId;
+  pendingActionLabel = label;
+  pendingActionUntil = millis() + 5000;
+  displayDirty = true;
+}
+
+void clearPendingAction() {
+  pendingUiId = "";
+  pendingActionLabel = "";
+  pendingActionUntil = 0;
+  displayDirty = true;
+}
+
 uint16_t statusColor(const String& status) {
   if (status == "running") {
     return TFT_GREEN;
@@ -167,6 +189,16 @@ uint16_t statusColor(const String& status) {
 
 uint16_t connectionColor(bool ok) {
   return ok ? TFT_GREEN : TFT_RED;
+}
+
+uint16_t wsPhaseColor() {
+  if (wsReady || wsPhase == "online") {
+    return TFT_GREEN;
+  }
+  if (wsPhase == "conn" || wsPhase == "reconn" || wsPhase == "search") {
+    return TFT_YELLOW;
+  }
+  return TFT_RED;
 }
 
 uint16_t batteryColor(int percent) {
@@ -189,15 +221,18 @@ String gpioMessage(uint8_t gpio, const char* label) {
   return String("gpio") + String(gpio) + " " + label;
 }
 
-void drawChip(int x, int y, const char* label, bool ok) {
+void drawChipColor(int x, int y, const char* label, uint16_t color) {
   const int width = 38;
   const int height = 15;
-  const uint16_t color = connectionColor(ok);
   M5.Display.fillRect(x - 1, y - 1, width + 2, height + 2, TFT_DARKGREY);
   M5.Display.drawRoundRect(x, y, width, height, 4, color);
   M5.Display.fillCircle(x + 8, y + 7, 3, color);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.drawString(label, x + 15, y + 4);
+}
+
+void drawChip(int x, int y, const char* label, bool ok) {
+  drawChipColor(x, y, label, connectionColor(ok));
 }
 
 int batteryPercent() {
@@ -299,6 +334,16 @@ void drawInfoRows(int width, const String& ipText, const String& hubText, const 
 
 void drawDeviceUiDetails(int width) {
   clearArea(7, 105, width - 14, 48);
+  if (pendingUiId == deviceUiId && millis() < pendingActionUntil && pendingActionLabel.length() > 0) {
+    M5.Display.fillRoundRect(7, 105, width - 14, 48, 5, TFT_NAVY);
+    M5.Display.drawRoundRect(7, 105, width - 14, 48, 5, TFT_CYAN);
+    M5.Display.setTextColor(TFT_CYAN, TFT_NAVY);
+    M5.Display.drawString("SENT", 15, 113);
+    M5.Display.setTextColor(TFT_WHITE, TFT_NAVY);
+    M5.Display.drawString(pendingActionLabel.substring(0, 18), 15, 131);
+    return;
+  }
+
   if (deviceUiMode == "menu" && deviceUiActionCount > 0) {
     M5.Display.setTextSize(1);
     int row = 0;
@@ -361,6 +406,9 @@ void drawDeviceUiDetails(int width) {
 String deviceUiDetailsSignature() {
   if (!deviceUiActive) {
     return "";
+  }
+  if (pendingUiId == deviceUiId && millis() < pendingActionUntil && pendingActionLabel.length() > 0) {
+    return String("pending|") + pendingActionLabel;
   }
   String signature = deviceUiMessage;
   for (int index = 0; index < deviceUiFieldCount; ++index) {
@@ -459,13 +507,16 @@ void drawUi() {
   const uint16_t stateColor = statusColor(displayStatus);
   const String hit = millis() < buttonHitUntil ? buttonHit : "";
   const String ipText = wifiReady ? WiFi.localIP().toString() : String("down(") + String(WiFi.status()) + ")";
-  const String hubText = remoteHost.length() ? remoteHost + ":" + String(remotePort) : "searching";
+  const String hubText = wsReady
+    ? remoteHost + ":" + String(remotePort)
+    : (remoteHost.length() ? wsPhase + " " + remoteHost + ":" + String(remotePort) : wsPhase);
   const int batPercent = batteryPercent();
 
   if (!uiFrameDrawn) {
     drawStaticFrame();
     lastDrawnWifiReady = !wifiReady;
     lastDrawnWsReady = !wsReady;
+    lastDrawnWsPhase = "";
     lastDrawnBatteryPercent = -1;
     lastDrawnIp = "";
     lastDrawnHub = "";
@@ -482,9 +533,10 @@ void drawUi() {
     drawChip(7, 4, "WiFi", wifiReady);
     lastDrawnWifiReady = wifiReady;
   }
-  if (wsReady != lastDrawnWsReady) {
-    drawChip(width - 45, 4, "WS", wsReady);
+  if (wsReady != lastDrawnWsReady || wsPhase != lastDrawnWsPhase) {
+    drawChipColor(width - 45, 4, "WS", wsPhaseColor());
     lastDrawnWsReady = wsReady;
+    lastDrawnWsPhase = wsPhase;
   }
   if (batPercent != lastDrawnBatteryPercent) {
     drawBattery(51, 5, batPercent);
@@ -584,15 +636,17 @@ bool findActionForButton(const String& button, String& actionIdOut, String& labe
 }
 
 bool sendUiAction(const String& actionId, const String& label, const String& button) {
+  const String uiId = deviceUiId;
   JsonDocument doc;
   doc["type"] = "uiAction";
   doc["token"] = kToken;
-  doc["uiId"] = deviceUiId;
+  doc["uiId"] = uiId;
   doc["actionId"] = actionId;
   doc["button"] = button;
   doc["source"] = kDeviceName;
   sendDoc(doc);
-  latchButtonHit(label.c_str());
+  latchPendingAction(uiId, label);
+  latchButtonHit((String("sent ") + label).c_str());
   mark(String("ui: ") + label);
   return true;
 }
@@ -655,8 +709,10 @@ void applyState(JsonDocument& doc) {
   JsonObject ui = doc["ui"].as<JsonObject>();
   if (!ui.isNull()) {
     const String nextUiId = ui["id"] | "";
-    if (!deviceUiActive || nextUiId != deviceUiId) {
+    const bool newUi = !deviceUiActive || nextUiId != deviceUiId;
+    if (newUi) {
       Serial.println(String("ui active: ") + nextUiId);
+      clearPendingAction();
     }
     deviceUiActive = true;
     deviceUiId = nextUiId;
@@ -702,8 +758,14 @@ void applyState(JsonDocument& doc) {
       deviceUiActionButtons[deviceUiActionCount] = button;
       ++deviceUiActionCount;
     }
-    int selected = ui["selected"] | deviceUiSelected;
-    deviceUiSelected = selected >= 0 && selected < deviceUiActionCount ? selected : 0;
+    if (newUi) {
+      int selected = ui["selected"] | 0;
+      deviceUiSelected = selected >= 0 && selected < deviceUiActionCount ? selected : 0;
+    } else if (deviceUiActionCount <= 0) {
+      deviceUiSelected = 0;
+    } else if (deviceUiSelected < 0 || deviceUiSelected >= deviceUiActionCount) {
+      deviceUiSelected = 0;
+    }
   } else if (deviceUiActive) {
     Serial.println("ui cleared");
     deviceUiActive = false;
@@ -715,6 +777,7 @@ void applyState(JsonDocument& doc) {
     deviceUiFieldCount = 0;
     deviceUiActionCount = 0;
     deviceUiSelected = 0;
+    clearPendingAction();
   }
   displayDirty = true;
 }
@@ -745,11 +808,17 @@ void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
       wsReady = true;
+      wsPhase = "online";
+      displayDirty = true;
       mark("ws connected");
       sendHello();
       break;
     case WStype_DISCONNECTED:
       wsReady = false;
+      if (wsPhase != "reconn") {
+        wsPhase = wifiReady ? "off" : "wifi";
+      }
+      displayDirty = true;
       mark("ws disconnected");
       break;
     case WStype_TEXT:
@@ -776,6 +845,7 @@ void connectWifi() {
   lastWifiAttempt = millis();
   wifiReady = false;
   wsReady = false;
+  wsPhase = "wifi";
   mdnsReady = false;
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -829,6 +899,11 @@ bool discoverBridge(String& hostOut, uint16_t& portOut) {
         }
       }
     }
+    if (strlen(kFallbackHost) > 0) {
+      hostOut = kFallbackHost;
+      portOut = kFallbackPort;
+      return true;
+    }
     for (int index = 0; index < found; ++index) {
       String hostname = MDNS.hostname(index);
       uint16_t port = MDNS.port(index);
@@ -853,18 +928,31 @@ void beginWs() {
   if (!wifiReady || remoteHost.length() == 0) {
     return;
   }
+  if (wsStarted && wsStartedHost == remoteHost && wsStartedPort == remotePort) {
+    return;
+  }
+  wsPhase = "conn";
+  displayDirty = true;
   ws.begin(remoteHost.c_str(), remotePort, "/");
   ws.setReconnectInterval(kReconnectIntervalMs);
   ws.onEvent(onWsEvent);
+  wsStarted = true;
+  wsStartedHost = remoteHost;
+  wsStartedPort = remotePort;
   mark(String("ws begin ") + remoteHost + ":" + String(remotePort));
 }
 
 void reconnect() {
   ws.disconnect();
+  wsStarted = false;
+  wsStartedHost = "";
+  wsStartedPort = 0;
   wsReady = false;
+  wsPhase = "reconn";
   remoteHost = "";
   lastReconnectAttempt = 0;
   lastDiscoverAt = 0;
+  displayDirty = true;
   mark("reconnect requested");
 }
 
@@ -1029,6 +1117,10 @@ void loop() {
   if (wifiReady && WiFi.status() != WL_CONNECTED) {
     wifiReady = false;
     wsReady = false;
+    wsStarted = false;
+    wsStartedHost = "";
+    wsStartedPort = 0;
+    wsPhase = "wifi";
     mdnsReady = false;
     mark("wifi lost");
   }
@@ -1040,8 +1132,10 @@ void loop() {
       if (wifiReady) {
         setupMdns();
         remoteHost = "";
+        wsPhase = "search";
         lastDiscoverAt = 0;
         lastReconnectAttempt = 0;
+        displayDirty = true;
       }
     }
   }
@@ -1050,11 +1144,14 @@ void loop() {
     const unsigned long now = millis();
     if (remoteHost.length() == 0 || now - lastDiscoverAt > kDiscoverIntervalMs) {
       lastDiscoverAt = now;
+      wsPhase = "search";
+      displayDirty = true;
       String discoveredHost;
       uint16_t discoveredPort = 0;
       if (discoverBridge(discoveredHost, discoveredPort)) {
         remoteHost = discoveredHost;
         remotePort = discoveredPort;
+        wsPhase = "conn";
         mark(String("found ") + remoteHost + ":" + String(remotePort));
       } else {
         mark("bridge not found");

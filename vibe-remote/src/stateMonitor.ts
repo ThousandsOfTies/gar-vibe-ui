@@ -6,7 +6,7 @@ import type { ActivitySnapshot, ChatState } from './protocol';
  *
  * 重要：承認待ちかどうかを正確に取る公式APIは存在しないため、
  * ここでは活動の有無に基づくヒューリスティックで chat 状態を推定する。
- * 正確なエージェントの入力待ちは安定APIでは取れないため、MCP側の自己申告を優先する。
+ * 正確なエージェントの入力待ちは安定APIでは取れないため、承認ブローカーのUI検出を優先する。
  */
 export class StateMonitor implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];

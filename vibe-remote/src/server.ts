@@ -27,7 +27,7 @@ export interface ServerOptions {
 
 /**
  * ローカルWebSocketサーバ。
- * - MCP/外部エージェントからの自己申告ステータスを受け取る
+ * - 承認ブローカーや状態ビューアからの状態/UIイベントを受け取る
  * - 作業状態を状態ビューアへ定期配信する
  *
  * セキュリティ：全メッセージに共有トークンを必須化し、不一致は拒否する。
@@ -40,6 +40,7 @@ export class RemoteServer implements vscode.Disposable {
   private agentStatus: AgentStatusSnapshot | undefined;
   private deviceUi: DeviceUiSpec | undefined;
   private lastUiAction: UiActionSnapshot | undefined;
+  private resolvedUiActions = new Map<string, UiActionSnapshot>();
   private lastStateJson = '';
 
   private readonly output: vscode.OutputChannel;
@@ -171,6 +172,7 @@ export class RemoteServer implements vscode.Disposable {
         return;
       }
       this.deviceUi = ui;
+      this.resolvedUiActions.delete(ui.id);
       this.log(`device UI ${ui.id}: ${ui.state ?? 'idle'} ${ui.title ?? ''}`.trim());
       this.sendAck(client, true);
       this.broadcastStateIfChanged(true);
@@ -182,6 +184,9 @@ export class RemoteServer implements vscode.Disposable {
         return;
       }
       if (!msg.uiId || this.deviceUi?.id === msg.uiId) {
+        if (this.deviceUi?.id) {
+          this.resolvedUiActions.delete(this.deviceUi.id);
+        }
         this.deviceUi = undefined;
       }
       this.sendAck(client, true);
@@ -197,6 +202,15 @@ export class RemoteServer implements vscode.Disposable {
         this.sendAck(client, false, 'uiId/actionId が必要です');
         return;
       }
+      const existing = this.resolvedUiActions.get(msg.uiId);
+      if (existing) {
+        this.log(
+          `ui action ${msg.uiId}: ignored duplicate ${msg.actionId} (${existing.actionId} already resolved)`
+        );
+        this.sendAck(client, true);
+        this.broadcastStateIfChanged(true);
+        return;
+      }
       this.lastUiAction = {
         uiId: msg.uiId,
         actionId: msg.actionId,
@@ -204,6 +218,8 @@ export class RemoteServer implements vscode.Disposable {
         source: msg.source?.trim() || 'device',
         ts: Date.now()
       };
+      this.resolvedUiActions.set(msg.uiId, this.lastUiAction);
+      this.markDeviceUiAnswered(this.lastUiAction);
       this.log(
         `ui action ${this.lastUiAction.uiId}: ${this.lastUiAction.actionId} (${this.lastUiAction.source})`
       );
@@ -217,10 +233,13 @@ export class RemoteServer implements vscode.Disposable {
         return;
       }
       const action =
-        !msg.uiId || this.lastUiAction?.uiId === msg.uiId ? this.lastUiAction : undefined;
+        (msg.uiId ? this.resolvedUiActions.get(msg.uiId) : this.lastUiAction) ??
+        (!msg.uiId || this.lastUiAction?.uiId === msg.uiId ? this.lastUiAction : undefined);
       this.send(client, { type: 'uiActionResult', action });
       if (action && msg.consume !== false) {
-        this.lastUiAction = undefined;
+        if (!msg.uiId || this.lastUiAction?.uiId === msg.uiId) {
+          this.lastUiAction = undefined;
+        }
       }
       return;
     }
@@ -234,12 +253,20 @@ export class RemoteServer implements vscode.Disposable {
       return true;
     }
 
+    if (!this.opts.token) {
+      this.authenticatedClients.add(client);
+      return true;
+    }
+
     this.log(`トークン不一致のメッセージを拒否: ${client.label}`);
     this.sendAck(client, false, 'トークン不一致');
     return false;
   }
 
   private isValidToken(token: string): boolean {
+    if (!this.opts.token) {
+      return true;
+    }
     const expected = Buffer.from(this.opts.token);
     const actual = Buffer.from(token || '');
     return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
@@ -302,6 +329,22 @@ export class RemoteServer implements vscode.Disposable {
 
   private send(client: RemoteClient, msg: OutboundMessage): void {
     client.send(msg);
+  }
+
+  private markDeviceUiAnswered(action: UiActionSnapshot): void {
+    if (!this.deviceUi || this.deviceUi.id !== action.uiId) {
+      return;
+    }
+    const actions = this.deviceUi.actions ?? [];
+    const index = actions.findIndex((item) => item.id === action.actionId);
+    const label = index >= 0 ? actions[index].label : action.actionId;
+    this.deviceUi = {
+      ...this.deviceUi,
+      state: 'done',
+      selected: index >= 0 ? index : this.deviceUi.selected,
+      message: `Answered: ${label}`,
+      updatedAt: Date.now()
+    };
   }
 
   private log(line: string): void {

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { RemoteServer, ServerOptions } from './server';
+import { ApprovalBrokerManager } from './approvalBrokerManager';
 import { DiscoveryPublisher } from './discovery';
 import { LocalBridgeManager } from './localBridgeManager';
 import { SerialSppBridge, SerialSppBridgeOptions } from './serialSppBridge';
@@ -13,6 +14,7 @@ let server: RemoteServer | undefined;
 let discovery: DiscoveryPublisher | undefined;
 let sppBridge: SerialSppBridge | undefined;
 let localBridge: LocalBridgeManager | undefined;
+let approvalBroker: ApprovalBrokerManager | undefined;
 let monitor: StateMonitor | undefined;
 let statusBar: vscode.StatusBarItem | undefined;
 let output: vscode.OutputChannel;
@@ -28,8 +30,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(monitor);
   localBridge = new LocalBridgeManager(context.extensionPath, output);
   context.subscriptions.push(localBridge);
+  approvalBroker = new ApprovalBrokerManager(context.extensionPath, output, () => currentToken);
+  context.subscriptions.push(approvalBroker);
 
   startServer(context, currentToken);
+  void syncApprovalBroker(false);
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.command = 'vibeRemote.openVirtualRemote';
@@ -64,6 +69,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('vibeRemote.stopLocalBridge', () => localBridge?.stop()),
     vscode.commands.registerCommand('vibeRemote.showLocalBridgeStatus', () =>
       localBridge?.showStatus()
+    ),
+    vscode.commands.registerCommand('vibeRemote.startApprovalBroker', () =>
+      approvalBroker?.start()
+    ),
+    vscode.commands.registerCommand('vibeRemote.stopApprovalBroker', () => approvalBroker?.stop()),
+    vscode.commands.registerCommand('vibeRemote.showApprovalBrokerStatus', () =>
+      approvalBroker?.showStatus()
     )
   );
 
@@ -73,6 +85,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (e.affectsConfiguration('vibeRemote')) {
         currentToken = await ensureToken(context);
         restartServer(context, currentToken);
+        if (e.affectsConfiguration('vibeRemote.approvalBroker')) {
+          void syncApprovalBroker(true);
+        }
       }
     })
   );
@@ -87,6 +102,8 @@ export function deactivate(): void {
   sppBridge = undefined;
   localBridge?.dispose();
   localBridge = undefined;
+  approvalBroker?.dispose();
+  approvalBroker = undefined;
 }
 
 async function ensureToken(context: vscode.ExtensionContext): Promise<string> {
@@ -194,4 +211,18 @@ function openVirtualRemote(context: vscode.ExtensionContext, token: string): voi
   // 状態ビューアはローカル接続するため、host が 0.0.0.0 でも 127.0.0.1 へ繋ぐ
   const wsHost = opts.host === '0.0.0.0' ? '127.0.0.1' : opts.host;
   panel.webview.html = getStatusViewerHtml(wsHost, opts.port, token);
+}
+
+async function syncApprovalBroker(stopWhenDisabled: boolean): Promise<void> {
+  const enabled = vscode.workspace
+    .getConfiguration('vibeRemote.approvalBroker')
+    .get<boolean>('enabled', false);
+  if (enabled) {
+    if (stopWhenDisabled) {
+      await approvalBroker?.stop(false);
+    }
+    await approvalBroker?.start(false);
+  } else if (stopWhenDisabled) {
+    await approvalBroker?.stop(false);
+  }
 }

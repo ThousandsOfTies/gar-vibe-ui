@@ -1,8 +1,8 @@
 {
   "name": "vibe-remote",
   "displayName": "Vibe Remote",
-  "description": "MCP対応エージェントが自己申告した作業状態を、トークン保護されたWebSocketとVS Code内ビューで表示します。",
-  "version": "0.1.0",
+  "description": "VS Codeの承認UIを監視し、Vibe Remote実機からAllow/Skipできるようにします。",
+  "version": "0.1.1",
   "publisher": "vibe",
   "private": true,
   "license": "MIT",
@@ -45,6 +45,18 @@
       {
         "command": "vibeRemote.showLocalBridgeStatus",
         "title": "Vibe Remote: Local Bridgeの状態を表示"
+      },
+      {
+        "command": "vibeRemote.startApprovalBroker",
+        "title": "Vibe Remote: Approval Brokerを開始"
+      },
+      {
+        "command": "vibeRemote.stopApprovalBroker",
+        "title": "Vibe Remote: Approval Brokerを停止"
+      },
+      {
+        "command": "vibeRemote.showApprovalBrokerStatus",
+        "title": "Vibe Remote: Approval Brokerの状態を表示"
       }
     ],
     "configuration": {
@@ -137,6 +149,41 @@
           "type": "string",
           "default": "",
           "description": "Local Bridgeを起動するHost OS側Node.js実行ファイル。空の場合は自動検出します。"
+        },
+        "vibeRemote.approvalBroker.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "VS Codeのbash実行確認をWindows UI Automationで検出し、Vibe Remoteへ転送するApproval Brokerを自動起動します。"
+        },
+        "vibeRemote.approvalBroker.dryRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "trueの場合、Vibe Remoteの応答を受け取ってもVS CodeのAllow/Skipボタンは押しません。"
+        },
+        "vibeRemote.approvalBroker.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Approval Brokerが接続するVibe Remote WebSocket host。WSLでは通常127.0.0.1でLocal Bridgeへ接続します。"
+        },
+        "vibeRemote.approvalBroker.port": {
+          "type": "number",
+          "default": 39273,
+          "description": "Approval Brokerが接続するVibe Remote WebSocket port。WSL構成では通常Local Bridgeの39273を使います。"
+        },
+        "vibeRemote.approvalBroker.pollSeconds": {
+          "type": "number",
+          "default": 2,
+          "description": "VS Code approval UIを監視する間隔（秒）。"
+        },
+        "vibeRemote.approvalBroker.decisionTimeoutSeconds": {
+          "type": "number",
+          "default": 60,
+          "description": "Vibe Remote上の承認UIで応答を待つ秒数。"
+        },
+        "vibeRemote.approvalBroker.logPath": {
+          "type": "string",
+          "default": "/tmp/vibe-approval-broker.log",
+          "description": "Approval Brokerの標準出力ログ保存先。"
         }
       }
     }
@@ -149,7 +196,6 @@
     "format:check": "prettier --check .",
     "test": "node --test --import tsx test/*.test.ts",
     "ci": "npm run compile && npm run typecheck && npm run lint && npm run format:check && npm run test && npm audit --audit-level=high",
-    "mcp": "node scripts/mcp-server.js",
     "local:bridge": "node scripts/local-bridge.js",
     "smoke:protocol": "node scripts/smoke-protocol.js",
     "virtual:device": "node scripts/virtual-device.js",

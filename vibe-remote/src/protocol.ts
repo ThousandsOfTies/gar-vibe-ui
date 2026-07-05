@@ -1,4 +1,4 @@
-// エージェント/状態ビューア と 拡張 の間でやり取りするメッセージ型。
+// デバイス/状態ビューア/承認ブローカー と 拡張 の間でやり取りするメッセージ型。
 
 /** デバイス → 拡張：接続認証 */
 export interface HelloMessage {
@@ -13,7 +13,7 @@ export interface PingMessage {
   token: string;
 }
 
-/** MCP/外部エージェント → 拡張：自己申告ステータス */
+/** 承認ブローカー/外部制御 → 拡張：自己申告ステータス */
 export interface AgentStatusMessage {
   type: 'agentStatus';
   token: string;
@@ -51,14 +51,14 @@ export interface DeviceUiSpec {
   expiresAt?: number;
 }
 
-/** MCP/外部エージェント → 拡張：小型デバイス向けUIを表示 */
+/** 承認ブローカー/外部制御 → 拡張：小型デバイス向けUIを表示 */
 export interface DeviceUiMessage {
   type: 'deviceUi';
   token: string;
   ui: Omit<DeviceUiSpec, 'updatedAt'> & { updatedAt?: number; ttlMs?: number };
 }
 
-/** MCP/外部エージェント → 拡張：小型デバイス向けUIを消去 */
+/** 承認ブローカー/外部制御 → 拡張：小型デバイス向けUIを消去 */
 export interface ClearDeviceUiMessage {
   type: 'clearDeviceUi';
   token: string;
@@ -75,7 +75,7 @@ export interface UiActionMessage {
   source?: string;
 }
 
-/** MCP/外部エージェント → 拡張：直近UIアクションの取得 */
+/** 承認ブローカー/外部制御 → 拡張：直近UIアクションの取得 */
 export interface GetUiActionMessage {
   type: 'getUiAction';
   token: string;
@@ -121,9 +121,9 @@ export interface AgentStatusSnapshot {
 export interface StateMessage {
   type: 'state';
   chat: ChatState;
-  /** MCP/外部エージェントから自己申告された状態 */
+  /** 承認ブローカー/外部制御から自己申告された状態 */
   agent?: AgentStatusSnapshot;
-  /** MCP/外部エージェントから指定された小型デバイス向けUI */
+  /** 承認ブローカー/外部制御から指定された小型デバイス向けUI */
   ui?: DeviceUiSpec;
   /** 直近に観測できた作業の実況（公式APIで取得） */
   activity: ActivitySnapshot;
@@ -137,7 +137,7 @@ export interface AckMessage {
   error?: string;
 }
 
-/** 拡張 → MCP/外部エージェント：直近UIアクション取得結果 */
+/** 拡張 → 承認ブローカー/外部制御：直近UIアクション取得結果 */
 export interface UiActionResultMessage {
   type: 'uiActionResult';
   action?: UiActionSnapshot;

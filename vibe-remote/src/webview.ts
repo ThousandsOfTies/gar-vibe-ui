@@ -1,6 +1,6 @@
 /**
  * 状態ビューアのWebView HTMLを生成する。
- * ローカルWebSocketサーバに接続し、MCP/外部エージェントから届いた状態を表示する。
+ * ローカルWebSocketサーバに接続し、承認ブローカーやデバイス状態を表示する。
  */
 export function getStatusViewerHtml(host: string, port: number, token: string): string {
   const wsUrl = `ws://${host}:${port}`;
@@ -43,6 +43,10 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
   button:active { transform:scale(.96); }
   button .sub { display:block; font-size:11px; font-weight:400; color:var(--muted); margin-top:3px; }
   .row { display:grid; grid-template-columns:1fr; gap:10px; margin-top:10px; }
+  .decision-actions { display:grid; grid-template-columns:1fr; gap:8px; margin-top:12px; }
+  .decision-actions button { border-radius:8px; padding:10px 12px; font-size:13px; text-align:left; }
+  .decision-actions button.selected { border-color:var(--yellow); color:var(--yellow); }
+  .decision-actions button:disabled { opacity:.55; cursor:default; transform:none; }
   .small { padding:10px; font-size:13px; }
   .log { margin-top:14px; font-size:11px; color:var(--muted); max-height:120px; overflow:auto; border-top:1px solid var(--line); padding-top:8px; }
   .conn { font-size:11px; color:var(--muted); margin-bottom:10px; }
@@ -112,6 +116,20 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
     log('未対応の操作です: ' + action);
   }
 
+  function sendUiAction(uiId, actionId) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { log('未接続のため送信できません'); return; }
+    if (!uiId || !actionId) { return; }
+    ws.send(JSON.stringify({
+      type:'uiAction',
+      token:TOKEN,
+      uiId,
+      actionId,
+      button:'chat',
+      source:'chat-button'
+    }));
+    log('選択を送信しました: ' + actionId);
+  }
+
   function setDot(id, cls, on) {
     const dot = document.getElementById(id);
     dot.className = 'dot ' + (on ? cls : '');
@@ -153,8 +171,13 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
       const ui = s.ui;
       const selected = Number.isFinite(ui.selected) ? ui.selected : 0;
       const actions = Array.isArray(ui.actions) ? ui.actions : [];
+      const answered = ui.state === 'done';
       const lines = [];
-      lines.push('<span class="needed">' + escapeHtml(ui.title || 'Device UI') + '</span>');
+      lines.push(
+        '<span class="' + (answered ? 'ok' : 'needed') + '">' +
+        escapeHtml(ui.title || 'Device UI') +
+        '</span>'
+      );
       if (ui.message) lines.push(escapeHtml(ui.message));
       if (Array.isArray(ui.fields)) {
         for (const f of ui.fields.slice(0, 3)) {
@@ -166,8 +189,22 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
         const cls = i === selected ? 'ok' : 'muted';
         lines.push('<span class="' + cls + '">' + mark + escapeHtml(actions[i].label || actions[i].id || '?') + '</span>');
       }
-      lines.push('<span class="muted">A Select / B Next / P Back</span>');
-      document.getElementById('lcd').innerHTML = lines.join('<br>');
+      lines.push(
+        '<span class="muted">' +
+        (answered ? 'Answered. Waiting for agent.' : 'A Select / B Next / P Back') +
+        '</span>'
+      );
+      const buttons = actions.map((action, i) => {
+        const label = escapeHtml(action.label || action.id || '?');
+        const selectedClass = i === selected ? ' selected' : '';
+        const disabled = answered ? ' disabled' : '';
+        return '<button class="decision-choice' + selectedClass + '" data-ui-id="' +
+          escapeAttr(ui.id) + '" data-action-id="' + escapeAttr(action.id || '') + '"' + disabled + '>' +
+          label + '</button>';
+      }).join('');
+      document.getElementById('lcd').innerHTML =
+        lines.join('<br>') +
+        (buttons ? '<div class="decision-actions">' + buttons + '</div>' : '');
       return;
     }
 
@@ -180,8 +217,17 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
     return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
 
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, '&#39;');
+  }
+
   document.querySelectorAll('button[data-action]').forEach((btn) => {
     btn.addEventListener('click', () => send(btn.getAttribute('data-action')));
+  });
+  document.getElementById('lcd').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button.decision-choice');
+    if (!btn || btn.disabled) { return; }
+    sendUiAction(btn.getAttribute('data-ui-id'), btn.getAttribute('data-action-id'));
   });
 
   connect();

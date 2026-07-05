@@ -44,18 +44,21 @@ const files = {
 };
 
 const controls = [
-  { file: files.buttonA, status: 'running', message: 'button A' },
-  { file: files.buttonB, status: 'waiting', message: 'button B' },
-  { file: files.buttonC, status: 'done', message: 'button C' },
-  { file: files.holdA, status: 'failed', message: 'button A hold' },
-  { file: files.holdB, status: 'idle', message: 'button B hold' },
-  { file: files.holdC, action: 'reconnect', message: 'button C hold' }
+  { file: files.buttonA, button: 'A' },
+  { file: files.buttonB, button: 'B' },
+  { file: files.buttonC, button: 'P' },
+  { file: files.holdA, button: 'A-hold' },
+  { file: files.holdB, button: 'B-hold' },
+  { file: files.holdC, button: 'P-hold' }
 ];
 
 let ws;
 let connected = false;
 let reconnectTimer;
 let pollTimer;
+let currentUi;
+let selectedIndex = 0;
+let pendingAction;
 const seen = new Map();
 
 setupDevDir();
@@ -101,6 +104,7 @@ function connect() {
     }
 
     if (msg.type === 'state') {
+      applyState(msg);
       fs.writeFileSync(files.state, JSON.stringify(msg, null, 2) + '\n');
       fs.writeFileSync(files.screen, renderScreen(msg));
     } else if (msg.type === 'ack') {
@@ -141,7 +145,7 @@ function pollControls() {
     fs.writeFileSync(control.file, '0\n');
     seen.set(control.file, statSignature(control.file));
 
-    if (control.action === 'reconnect') {
+    if (control.button === 'P-hold') {
       appendEvent('control reconnect');
       if (ws) {
         ws.close();
@@ -151,16 +155,119 @@ function pollControls() {
       continue;
     }
 
-    appendEvent(`control ${path.basename(control.file)} -> ${control.status}`);
-    send({
-      type: 'agentStatus',
-      token,
-      status: control.status,
-      source,
-      message: control.message,
-      ttlMs: 120000
-    });
+    handleButton(control.button);
   }
+}
+
+function applyState(state) {
+  const nextUi = state.ui && typeof state.ui.id === 'string' ? state.ui : undefined;
+  if (!nextUi) {
+    currentUi = undefined;
+    selectedIndex = 0;
+    pendingAction = undefined;
+    return;
+  }
+  const previousUiId = currentUi?.id;
+  currentUi = nextUi;
+  const actionCount = actions().length;
+  if (previousUiId !== currentUi.id) {
+    pendingAction = undefined;
+    selectedIndex = Number.isFinite(currentUi.selected) ? Math.floor(currentUi.selected) : 0;
+  }
+  if (actionCount <= 0) {
+    selectedIndex = 0;
+  } else if (selectedIndex < 0 || selectedIndex >= actionCount) {
+    selectedIndex = 0;
+  }
+}
+
+function actions() {
+  return Array.isArray(currentUi?.actions) ? currentUi.actions : [];
+}
+
+function handleButton(button) {
+  if (!currentUi) {
+    appendEvent(`button ${button}: ignored (no device UI)`);
+    return;
+  }
+  if (currentUi.mode === 'direct') {
+    if (sendActionForButton(button)) {
+      return;
+    }
+    appendEvent(`button ${button}: ignored (no direct action)`);
+    return;
+  }
+  if (button === 'A') {
+    if (!sendSelectedAction(button)) {
+      appendEvent('button A: ignored (no menu action)');
+    }
+    return;
+  }
+  if (button === 'B') {
+    const list = actions();
+    if (list.length <= 0) {
+      appendEvent('button B: ignored (no menu action)');
+      return;
+    }
+    selectedIndex = (selectedIndex + 1) % list.length;
+    appendEvent(`button B: selected ${list[selectedIndex].id}`);
+    fs.writeFileSync(files.screen, renderScreen({ ui: currentUi, chat: 'idle', activity: {} }));
+    return;
+  }
+  if (button === 'P') {
+    sendBackAction(button);
+    return;
+  }
+  if (!sendActionForButton(button)) {
+    appendEvent(`button ${button}: ignored (no matching hold action)`);
+  }
+}
+
+function sendActionForButton(button) {
+  const action = actions().find((item) => item.button === button);
+  if (!action) {
+    return false;
+  }
+  sendUiAction(action, button);
+  return true;
+}
+
+function sendSelectedAction(button) {
+  const list = actions();
+  if (list.length <= 0) {
+    return false;
+  }
+  if (selectedIndex < 0 || selectedIndex >= list.length) {
+    selectedIndex = 0;
+  }
+  sendUiAction(list[selectedIndex], button);
+  return true;
+}
+
+function sendBackAction(button) {
+  const action = actions().find((item) => ['back', 'cancel', 'no', 'ng'].includes(item.id)) || {
+    id: 'back',
+    label: 'Back'
+  };
+  sendUiAction(action, button);
+}
+
+function sendUiAction(action, button) {
+  appendEvent(`button ${button}: ui action ${currentUi.id}/${action.id}`);
+  pendingAction = {
+    uiId: currentUi.id,
+    label: action.label,
+    until: Date.now() + 5000
+  };
+  send({
+    type: 'uiAction',
+    token,
+    uiId: currentUi.id,
+    actionId: action.id,
+    button,
+    source
+  });
+  fs.writeFileSync(files.screen, renderScreen({ ui: currentUi, chat: 'idle', activity: {} }));
 }
 
 function send(msg) {
@@ -174,11 +281,20 @@ function send(msg) {
 function renderScreen(state) {
   const agent = state.agent || {};
   const activity = state.activity || {};
+  const ui = state.ui || currentUi;
+  const uiActions = Array.isArray(ui?.actions) ? ui.actions : [];
+  const sent =
+    pendingAction && pendingAction.uiId === ui?.id && Date.now() < pendingAction.until
+      ? pendingAction.label
+      : '-';
   return [
     'Vibe Remote virtual device',
     `chat:   ${state.chat || 'unknown'}`,
     `agent:  ${agent.source || '-'} ${agent.status || 'idle'}`,
     `msg:    ${agent.message || '-'}`,
+    `ui:     ${ui?.id || '-'} ${ui?.title || ''}`,
+    `select: ${uiActions[selectedIndex]?.label || '-'}`,
+    `sent:   ${sent}`,
     `file:   ${activity.file || '-'}`,
     `cmd:    ${activity.command || '-'}`,
     `diag:   E${activity.errors ?? 0} W${activity.warnings ?? 0}`,
@@ -186,11 +302,11 @@ function renderScreen(state) {
     `debug:  ${activity.debugging ? 'running' : 'idle'}`,
     '',
     'controls:',
-    '  echo press > button_a  # running',
-    '  echo press > button_b  # waiting',
-    '  echo press > button_c  # done',
-    '  echo hold  > hold_a    # failed',
-    '  echo hold  > hold_b    # idle',
+    '  echo press > button_a  # select / confirm current UI action',
+    '  echo press > button_b  # rotate menu selection',
+    '  echo press > button_c  # back / cancel current UI',
+    '  echo hold  > hold_a    # A-hold UI action when defined',
+    '  echo hold  > hold_b    # B-hold UI action when defined',
     '  echo hold  > hold_c    # reconnect',
     ''
   ].join('\n');
@@ -217,11 +333,11 @@ function usageText() {
 This directory behaves like a tiny pseudo /dev surface for Vibe Remote.
 
 Controls:
-  echo press > button_a  # running
-  echo press > button_b  # waiting
-  echo press > button_c  # done
-  echo hold  > hold_a    # failed
-  echo hold  > hold_b    # idle
+  echo press > button_a  # select / confirm current UI action
+  echo press > button_b  # rotate menu selection
+  echo press > button_c  # back / cancel current UI
+  echo hold  > hold_a    # A-hold UI action when defined
+  echo hold  > hold_b    # B-hold UI action when defined
   echo hold  > hold_c    # reconnect
 
 Outputs:

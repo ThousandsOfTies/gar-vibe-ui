@@ -8,6 +8,7 @@ vibe-remote/node_modules/
 vibe-remote/dist/
 vibe-remote/.tools/
 vibe-remote/m5stickc-client/artifacts/
+vibe-remote/m5stickc-client/.gar-artifact-*
 vibe-remote/m5stickc-client/.env.local
 vibe-remote/m5stickc-client/.pio/
 vibe-remote/m5stickc-client/.tools/
