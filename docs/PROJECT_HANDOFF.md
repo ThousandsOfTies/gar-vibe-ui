@@ -1,25 +1,29 @@
 # Vibe Remote — Project Handoff
 
-Last updated: 2026-06-21
+Last updated: 2026-07-05
 
 ## Current Direction
 
-Vibe Remote is an MCP-cooperative status and small-device UI bridge.
+Vibe Remote is now a VS Code approval broker for small physical devices.
 
-The earlier idea of controlling arbitrary VS Code agent UIs from the outside was
-discarded. Practical testing showed that OK/NG prompts, submit buttons, mic
-controls, and prompt text are usually owned by each agent extension's internal
-webview state. They cannot be driven reliably through stable VS Code APIs.
+The project originally explored an MCP-cooperative agent path. That worked for
+agents willing to call tools, but it was not reliable as a general approval
+surface because tool availability and model behavior vary. The current product
+path is harder and more direct: watch the actual VS Code host approval UI with
+Windows UI Automation, mirror the pending approval to Vibe Remote, then invoke
+the real VS Code `Allow` or `Skip` button after the user responds on the device.
 
-The viable design is explicit cooperation from the agent side:
+Current flow:
 
-- The agent reports `running`, `waiting`, `done`, `failed`, or `idle`.
-- The agent can publish a small declarative device UI.
-- M5StickC/M5Stack-class devices subscribe to that state/UI stream.
-- Physical button actions are returned to the agent through MCP.
+```text
+VS Code / Copilot shows "Run bash command?"
+  -> vscode-approval-broker.ps1 detects Allow/Skip buttons through UIA
+  -> broker posts a deviceUi payload to Vibe Remote
+  -> M5StickC or the status viewer returns allow/skip/cancel
+  -> broker re-finds the approval and invokes the matching VS Code button
+```
 
-This keeps the product experience: "notice that the agent is waiting and answer
-from a small remote device," while avoiding brittle VS Code command-control.
+The MCP stdio server and MCP configuration have been removed.
 
 ## Implemented
 
@@ -32,88 +36,155 @@ from a small remote device," while avoiding brittle VS Code command-control.
   - diagnostics count
   - active file
   - task/debug/focus state
-- Local Bridge manager commands:
+- Device UI state distribution over WebSocket.
+- Clickable decision buttons in the VS Code status viewer.
+- First response wins for a given device UI id.
+
+### Local Bridge
+
+Used when VS Code runs in WSL/Remote but the physical device connects to the
+Windows host over LAN.
+
+- Host OS listen port: `39273`
+- WSL/extension upstream port: `39271`
+- Advertises `_vibe-remote._tcp.local`
+- Proxies WebSocket traffic between the physical device and the WSL extension.
+- Command Palette entries:
   - `Vibe Remote: Local Bridgeを開始`
   - `Vibe Remote: Local Bridgeを停止`
   - `Vibe Remote: Local Bridgeの状態を表示`
-- Windows/host Local Bridge support for LAN devices:
-  - listens on host OS, default `39273`
-  - proxies to WSL/extension host, default `39271`
-  - advertises `_vibe-remote._tcp.local`
-  - no hard-coded Node.js path; auto-detects host `node.exe`, with
-    `vibeRemote.localBridge.nodePath` override
 
-### MCP Server
+Default shape:
 
-MCP stdio server: `vibe-remote/scripts/mcp-server.js`
+```text
+M5StickC -> Windows LAN/mDNS/ws://PC:39273 -> Local Bridge -> ws://127.0.0.1:39271 -> WSL extension
+```
 
-Tools:
+### Approval Broker
 
-- `vibe_remote_set_status`
-- `vibe_remote_heartbeat`
-- `vibe_remote_request_decision`
-- `vibe_remote_show_ui`
-- `vibe_remote_get_action`
-- `vibe_remote_clear_ui`
-- `vibe_remote_clear_status`
+Main files:
 
-The MCP server now keeps a persistent WebSocket connection within the MCP
-process instead of opening a new socket for every tool call.
-`vibe_remote_request_decision` and `vibe_remote_show_ui` return structured MCP
-content with `ui_id`, `status`, `action_count`, and `timeout_seconds`, while
-keeping the human-readable text response for compatibility.
-`vibe_remote_get_action` waits up to 60 seconds by default, or uses
-`timeout_seconds` when provided. Use `timeout_seconds: 0` for immediate polling.
+- `vibe-remote/src/approvalBrokerManager.ts`
+- `vibe-remote/scripts/vscode-approval-broker.ps1`
+
+Command Palette entries:
+
+- `Vibe Remote: Approval Brokerを開始`
+- `Vibe Remote: Approval Brokerを停止`
+- `Vibe Remote: Approval Brokerの状態を表示`
+
+Settings:
+
+- `vibeRemote.approvalBroker.enabled`
+- `vibeRemote.approvalBroker.dryRun`
+- `vibeRemote.approvalBroker.host`
+- `vibeRemote.approvalBroker.port`
+- `vibeRemote.approvalBroker.pollSeconds`
+- `vibeRemote.approvalBroker.decisionTimeoutSeconds`
+- `vibeRemote.approvalBroker.logPath`
+
+Important behavior:
+
+- The broker watches Windows UIA for VS Code windows with enabled `Allow` and
+  `Skip`/`Proceed without executing this command` buttons.
+- It requires document text containing `Run bash command?`.
+- It sends `Allow`, `Skip`, and `Cancel` choices to Vibe Remote.
+- Before pressing a VS Code button, it re-finds the pending approval.
+- `Cancel` and timeout leave VS Code untouched.
+- `dryRun: true` shows the remote UI but does not press VS Code buttons.
+- In WSL setups the broker usually connects to the Local Bridge at
+  `127.0.0.1:39273`.
 
 ### Device UI Protocol
 
-Small declarative UI payloads are supported via WebSocket and MCP.
+The protocol is still WebSocket JSON. It is no longer exposed as an MCP stdio
+tool surface.
 
-Current supported UI shape:
+Inbound examples:
 
-- `id`
-- `title`
-- `state`: `running` / `waiting` / `done` / `failed` / `idle`
-- `message`
-- `fields`: up to 3 compact rows
-- `actions`: up to 3 actions
-- `button`: `A`, `B`, `P`, `A-hold`, `B-hold`, `P-hold`
-- `ttlMs`
+```json
+{ "type": "hello", "token": "..." }
+{ "type": "ping", "token": "..." }
+{
+  "type": "agentStatus",
+  "token": "...",
+  "status": "waiting",
+  "source": "approval-broker",
+  "message": "VS Code approval",
+  "ttlMs": 60000
+}
+{
+  "type": "deviceUi",
+  "token": "...",
+  "ui": {
+    "id": "vscode-approval-1234abcd",
+    "title": "VS Code Approval",
+    "state": "waiting",
+    "mode": "menu",
+    "message": "Run bash command?",
+    "fields": [{ "label": "cmd", "value": "mkdir -p /tmp/example" }],
+    "actions": [
+      { "id": "allow", "label": "Allow" },
+      { "id": "skip", "label": "Skip" },
+      { "id": "cancel", "label": "Cancel" }
+    ],
+    "ttlMs": 60000
+  }
+}
+{
+  "type": "uiAction",
+  "token": "...",
+  "uiId": "vscode-approval-1234abcd",
+  "actionId": "allow",
+  "button": "A",
+  "source": "M5StickC-Plus2-Vibe-Min"
+}
+```
 
-M5StickC display contract:
+Outbound examples:
 
-- Header: Wi-Fi and WebSocket connection chips.
-- Status card: `state` label and `title`.
-- Detail area: 3 compact rows.
-  - If only `message` exists, render it wrapped across up to 3 rows.
-  - If `fields` exist, render `message` on row 1 when present, then render
-    field rows in the remaining space.
-  - If `message` is absent, render up to 3 fields.
-  - If both `message` and `fields` are absent, render up to 3 action hints.
-- Footer: three persistent button rows for `A`, `B`, and `P`.
-- Truncation:
-  - `title`: normalized to 32 chars by the server; M5StickC shows 9 chars.
-  - `message`: normalized to 120 chars; M5StickC wraps 18 chars x 3 lines, or
-    shows 18 chars when fields are present.
-  - `field.label`: normalized to 8 chars; M5StickC shows 7 chars.
-  - `field.value`: normalized to 24 chars; M5StickC shows 18 chars.
-  - `action.label`: normalized to 10 chars; footer shows the available width.
-- Button mapping:
-  - front button short press: `A`
-  - side button short press: `B`
-  - power button short press: `P`
-  - front button hold: `A-hold`
-  - side button hold: `B-hold`
-  - power button hold: `P-hold`
-- Fallback behavior when no matching device UI action exists:
-  - `A`: sends `running`
-  - `B`: sends `waiting`
-  - `P`: sends `done`
-  - `A-hold`: sends `failed`
-  - `B-hold`: sends `idle`
-  - `P-hold`: reconnects
+```json
+{
+  "type": "state",
+  "chat": "maybeWaiting",
+  "agent": {
+    "source": "approval-broker",
+    "status": "waiting",
+    "message": "VS Code approval",
+    "updatedAt": 1234567890
+  },
+  "ui": {
+    "id": "vscode-approval-1234abcd",
+    "title": "VS Code Approval",
+    "state": "waiting",
+    "message": "Run bash command?",
+    "actions": [
+      { "id": "allow", "label": "Allow" },
+      { "id": "skip", "label": "Skip" }
+    ]
+  },
+  "activity": {
+    "errors": 0,
+    "warnings": 0,
+    "debugging": false,
+    "taskRunning": false,
+    "focused": true
+  },
+  "ts": 1234567890
+}
+{
+  "type": "uiActionResult",
+  "action": {
+    "uiId": "vscode-approval-1234abcd",
+    "actionId": "allow",
+    "button": "A",
+    "source": "M5StickC-Plus2-Vibe-Min",
+    "ts": 1234567890
+  }
+}
+```
 
-### M5StickC Plus2 Firmware
+## M5StickC Plus2 Firmware
 
 Main firmware file:
 
@@ -131,160 +202,55 @@ Implemented:
 - WebSocket auth using `VIBE_REMOTE_TOKEN`.
 - vertical M5StickC layout.
 - partial redraw to reduce flicker.
-- fixed header text removed to preserve space.
 - device UI rendering, including compact `fields`.
-- physical button action mapping:
-  - front button `A`
-  - side button `B`
-  - power button short press `P`
-- default status fallback when no device UI is active.
+- menu mode: A selects, B rotates, P backs/cancels.
+- selected cursor is preserved across refreshes of the same UI.
+- after action send, the display shows a short `SENT` acknowledgement.
+- WebSocket phase display to clarify search/connect/reconnect state.
 
 Verified on real M5StickC Plus2:
 
 - Wi-Fi connected.
-- WebSocket connected.
-- UI displayed from MCP.
-- `A OK` press returned:
+- WebSocket connected through Local Bridge.
+- UI displayed for VS Code `Run bash command?` approval.
+- Selecting `Allow` from the device advanced the Copilot/VS Code approval.
+
+## Configuration Notes
+
+Workspace settings used during validation:
 
 ```json
 {
-  "uiId": "mcp-proof-1",
-  "actionId": "ok",
-  "button": "A",
-  "source": "M5StickC-Plus2-Vibe-Min"
+  "vibeRemote.token": "YOUR_TOKEN",
+  "vibeRemote.approvalBroker.dryRun": false,
+  "vibeRemote.approvalBroker.host": "127.0.0.1",
+  "vibeRemote.approvalBroker.port": 39273
 }
 ```
 
-### Tooling / Quality
-
-- ESLint added.
-- Prettier added.
-- Unit tests added for protocol helpers.
-- `npm run ci` passes:
-  - compile
-  - typecheck
-  - lint
-  - format check
-  - unit tests
-  - audit
-
-## Removed / Avoided
-
-- VS Code command-control dispatch for OK/NG/submit/mic/read-aloud.
-- DOM/webview scraping of other extensions.
-- Claims that Vibe Remote can universally press arbitrary agent UI buttons.
-- Runtime Local Bridge process management from GAR. Local Bridge belongs to the
-  Vibe Remote extension/runtime side, not GaplessAgentRuntime.
-
-## Protocol
-
-Inbound examples:
-
-```json
-{ "type": "hello", "token": "..." }
-{ "type": "ping", "token": "..." }
-{
-  "type": "agentStatus",
-  "token": "...",
-  "status": "running",
-  "source": "codex",
-  "message": "building",
-  "ttlMs": 120000
-}
-{
-  "type": "deviceUi",
-  "token": "...",
-  "ui": {
-    "id": "decision-1",
-    "title": "Decision",
-    "state": "waiting",
-    "message": "Flash firmware now?",
-    "actions": [
-      { "id": "ok", "label": "OK", "button": "A" },
-      { "id": "ng", "label": "NG", "button": "B" },
-      { "id": "later", "label": "Later", "button": "P" }
-    ],
-    "ttlMs": 180000
-  }
-}
-{
-  "type": "uiAction",
-  "token": "...",
-  "uiId": "decision-1",
-  "actionId": "ok",
-  "button": "A",
-  "source": "M5StickC-Plus2-Vibe-Min"
-}
-```
-
-Outbound examples:
+For automatic broker startup:
 
 ```json
 {
-  "type": "state",
-  "chat": "maybeWaiting",
-  "agent": {
-    "source": "codex",
-    "status": "waiting",
-    "message": "building",
-    "updatedAt": 1234567890
-  },
-  "ui": {
-    "id": "decision-1",
-    "title": "Decision",
-    "state": "waiting",
-    "message": "Flash firmware now?",
-    "actions": [
-      { "id": "ok", "label": "OK", "button": "A" }
-    ]
-  },
-  "activity": {
-    "errors": 0,
-    "warnings": 0,
-    "debugging": false,
-    "taskRunning": false,
-    "focused": true
-  },
-  "ts": 1234567890
-}
-{
-  "type": "uiActionResult",
-  "action": {
-    "uiId": "decision-1",
-    "actionId": "ok",
-    "button": "A",
-    "source": "M5StickC-Plus2-Vibe-Min",
-    "ts": 1234567890
-  }
+  "vibeRemote.approvalBroker.enabled": true
 }
 ```
 
-## MCP Configuration
+The old `vibe_remote` MCP entries were removed from:
 
-```toml
-[mcp_servers.vibe_remote]
-command = "/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/node.sh"
-args = ["/home/user/Yurufuwa/gar-vibe-ui/vibe-remote/scripts/mcp-server.js"]
-env = { VIBE_REMOTE_TOKEN = "YOUR_TOKEN" }
-```
-
-Optional env:
-
-```toml
-env = {
-  VIBE_REMOTE_TOKEN = "YOUR_TOKEN",
-  VIBE_REMOTE_HOST = "127.0.0.1",
-  VIBE_REMOTE_PORT = "39271"
-}
-```
+- workspace `.vscode/mcp.json`
+- Windows VS Code User `mcp.json`
+- Codex `~/.codex/config.toml`
 
 ## Common Commands
 
-Run CI:
+Run validation:
 
 ```bash
 cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote
-./scripts/npm.sh run ci
+./scripts/npm.sh run typecheck
+./scripts/npm.sh run lint
+./scripts/npm.sh test
 ```
 
 Build/flash M5StickC firmware locally:
@@ -295,48 +261,39 @@ cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote/m5stickc-client
 .tools/platformio/bin/platformio run -e m5stickc-plus2-vibe-min -t upload --upload-port /dev/ttyACM0
 ```
 
-Show UI through MCP server manually:
+Manual broker debug from Windows PowerShell:
 
-```bash
-cd /home/user/Yurufuwa/gar-vibe-ui/vibe-remote
-VIBE_REMOTE_TOKEN=YOUR_TOKEN ./scripts/node.sh scripts/mcp-server.js <<'JSON'
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"vibe_remote_show_ui","arguments":{"id":"mcp-proof-1","title":"MCP Test","state":"waiting","message":"Choose from M5StickC","actions":[{"id":"ok","label":"OK","button":"A"},{"id":"ng","label":"NG","button":"B"},{"id":"later","label":"Later","button":"P"}],"ttl_seconds":180}}}
-JSON
+```powershell
+$env:VIBE_REMOTE_TOKEN = "YOUR_TOKEN"
+$env:VIBE_REMOTE_HOST = "127.0.0.1"
+$env:VIBE_REMOTE_PORT = "39273"
+& "\\wsl.localhost\Ubuntu-26.04\home\user\Yurufuwa\gar-vibe-ui\vibe-remote\scripts\vscode-approval-broker.ps1" -Loop
 ```
 
-Read selected action:
+Safe probe:
 
-```bash
-VIBE_REMOTE_TOKEN=YOUR_TOKEN ./scripts/node.sh scripts/mcp-server.js <<'JSON'
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"vibe_remote_get_action","arguments":{"ui_id":"mcp-proof-1","consume":false,"timeout_seconds":60}}}
-JSON
+```powershell
+& "\\wsl.localhost\Ubuntu-26.04\home\user\Yurufuwa\gar-vibe-ui\vibe-remote\scripts\vscode-approval-broker.ps1" -Loop -DryRun
 ```
 
-## Related Repositories / Commits
+## Removed / Avoided
 
-Recent pushed commits:
+- MCP stdio server and tool-surface dependency.
+- Generic claims that Vibe Remote can control arbitrary agent UI.
+- DOM/webview scraping of other extensions.
+- Shelling into a fake/mock Vibe Remote server for approval behavior.
+- Direct agent cooperation as the primary approval path.
 
-- `gar-vibe-ui`: `484f34a Add M5StickC Vibe Remote bridge`
-- `GaplessAgentRuntime`: `cd8ef92 Add ESP32 and Vibe Remote GAR support`
+## Related Commits
 
-GAR has ESP32/M5Stack build/flash support and documentation, but Vibe Remote
-runtime process management remains in `gar-vibe-ui/vibe-remote`.
+Recent pushed commit:
 
-## Promotional Material
-
-`docs/vibe-remote-concept.html` is the concept/spec document. It should describe
-the current MCP/device-UI architecture and avoid claiming generic VS Code
-command-control.
+- `gar-vibe-ui`: `3ea722a Add Vibe Remote approval broker`
 
 ## Next Steps
 
-1. Add broader tests:
-   - MCP persistent WebSocket behavior
-   - server device UI normalization
-   - Local Bridge text/binary forwarding regression
-2. Consider hardware expansion:
-   - M5StickC has limited buttons
-   - possible options are button combinations, hold actions, I2C button unit, or
-     a different M5Stack device with more inputs
+1. Make extension packaging/install smoother so command palette entries appear
+   without manual copying.
+2. Add automated regression tests around device UI first-response behavior.
+3. Harden UIA detection against VS Code/Copilot text and accessibility changes.
+4. Consider masking or avoiding token exposure in broker process command lines.
