@@ -1,4 +1,4 @@
-# Vibe Remote Status Bridge
+# Vibe Remote Approval Bridge
 
 This package runs a local Vibe Remote bridge. It watches VS Code approval UI with Windows UI Automation and mirrors pending bash approvals to a physical Vibe Remote device.
 
