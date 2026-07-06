@@ -4,9 +4,18 @@ import * as path from 'path';
 import * as util from 'util';
 import * as vscode from 'vscode';
 
+import {
+  buildBrokerStartArgs,
+  buildStartPowerShellCommand,
+  buildStatusPowerShellCommand,
+  buildStopPowerShellCommand,
+  defaultApprovalBrokerPort,
+  isWsl,
+  parseProcessList,
+  powerShellPath
+} from './approvalBrokerUtil';
+
 const execFile = util.promisify(childProcess.execFile);
-const BROKER_PROCESS_FILTER =
-  "$_.Name -like 'powershell*.exe' -and $_.CommandLine -match '(^|\\s)-File\\s+.*vscode-approval-broker\\.ps1'";
 
 export interface ApprovalBrokerOptions {
   enabled: boolean;
@@ -62,37 +71,16 @@ export class ApprovalBrokerManager implements vscode.Disposable {
     fs.rmSync(opts.logPath, { force: true });
     fs.rmSync(`${opts.logPath}.err`, { force: true });
 
-    const args = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      windowsScript,
-      '-Loop',
-      '-HostName',
-      opts.host,
-      '-Port',
-      String(opts.port),
-      '-Token',
+    const args = buildBrokerStartArgs(windowsScript, windowsLog, {
+      host: opts.host,
+      port: opts.port,
       token,
-      '-PollSeconds',
-      String(opts.pollSeconds),
-      '-DecisionTimeoutSeconds',
-      String(opts.decisionTimeoutSeconds),
-      '-LogPath',
-      windowsLog
-    ];
-    if (opts.dryRun) {
-      args.push('-DryRun');
-    }
+      pollSeconds: opts.pollSeconds,
+      decisionTimeoutSeconds: opts.decisionTimeoutSeconds,
+      dryRun: opts.dryRun
+    });
 
-    const ps = [
-      `$a=@(${args.map(psQuote).join(',')})`,
-      "Start-Process -FilePath 'powershell.exe' " +
-        "-ArgumentList $a -WorkingDirectory 'C:\\' -WindowStyle Hidden"
-    ].join('; ');
-
-    await this.runPowerShell(ps);
+    await this.runPowerShell(buildStartPowerShellCommand(args));
     await delay(800);
     const after = await this.status();
     if (!after.running) {
@@ -114,12 +102,7 @@ export class ApprovalBrokerManager implements vscode.Disposable {
   }
 
   async stop(showMessage = true): Promise<void> {
-    const ps = [
-      'Get-CimInstance Win32_Process',
-      `Where-Object { ${BROKER_PROCESS_FILTER} }`,
-      'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }'
-    ].join(' | ');
-    await this.runPowerShell(ps);
+    await this.runPowerShell(buildStopPowerShellCommand());
     if (showMessage) {
       void vscode.window.showInformationMessage('Vibe Remote Approval Broker を停止しました。');
     }
@@ -150,16 +133,8 @@ export class ApprovalBrokerManager implements vscode.Disposable {
 
   private async status(): Promise<ApprovalBrokerStatus> {
     const opts = this.readOptions();
-    const processPs = [
-      'Get-CimInstance Win32_Process',
-      `Where-Object { ${BROKER_PROCESS_FILTER} }`,
-      'ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }'
-    ].join(' | ');
-    const processes = await this.runPowerShell(processPs);
-    const lines = processes.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const processes = await this.runPowerShell(buildStatusPowerShellCommand());
+    const lines = parseProcessList(processes.stdout);
     return {
       running: lines.length > 0,
       processes: lines,
@@ -220,28 +195,6 @@ export class ApprovalBrokerManager implements vscode.Disposable {
       }
     }
   }
-}
-
-function defaultApprovalBrokerPort(): number {
-  return isWsl() ? 39273 : 39271;
-}
-
-function isWsl(): boolean {
-  return (
-    process.platform === 'linux' &&
-    fs.existsSync('/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe')
-  );
-}
-
-function powerShellPath(): string {
-  if (isWsl()) {
-    return '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
-  }
-  return 'powershell.exe';
-}
-
-function psQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function delay(ms: number): Promise<void> {

@@ -138,6 +138,33 @@ String lastDrawnDeviceUiDetails;
 String lastDrawnHit;
 String lastDrawnFooter;
 
+// Theme palette (mirrors the VS Code Vibe Remote status viewer's dark theme
+// so the physical device and the webview share one visual language).
+// Falls back to plain TFT_* constants until initTheme() runs in setup().
+uint16_t colorBg = TFT_BLACK;
+uint16_t colorPanel = TFT_DARKGREY;
+uint16_t colorLine = TFT_DARKGREY;
+uint16_t colorText = TFT_WHITE;
+uint16_t colorMuted = TFT_LIGHTGREY;
+uint16_t colorAccent = TFT_CYAN;
+uint16_t colorGreen = TFT_GREEN;
+uint16_t colorYellow = TFT_YELLOW;
+uint16_t colorRed = TFT_RED;
+
+void initTheme() {
+#if HAS_M5UNIFIED
+  colorBg = M5.Display.color565(14, 17, 22);
+  colorPanel = M5.Display.color565(22, 27, 34);
+  colorLine = M5.Display.color565(42, 51, 64);
+  colorText = M5.Display.color565(230, 237, 243);
+  colorMuted = M5.Display.color565(154, 167, 180);
+  colorAccent = M5.Display.color565(88, 166, 255);
+  colorGreen = M5.Display.color565(63, 185, 80);
+  colorYellow = M5.Display.color565(227, 179, 65);
+  colorRed = M5.Display.color565(248, 81, 73);
+#endif
+}
+
 void mark(const String& line) {
   lastLine = line;
   displayDirty = true;
@@ -173,42 +200,42 @@ void clearPendingAction() {
 
 uint16_t statusColor(const String& status) {
   if (status == "running") {
-    return TFT_GREEN;
+    return colorGreen;
   }
   if (status == "waiting") {
-    return TFT_YELLOW;
+    return colorYellow;
   }
   if (status == "failed") {
-    return TFT_RED;
+    return colorRed;
   }
   if (status == "done") {
-    return TFT_CYAN;
+    return colorAccent;
   }
-  return TFT_DARKGREY;
+  return colorMuted;
 }
 
 uint16_t connectionColor(bool ok) {
-  return ok ? TFT_GREEN : TFT_RED;
+  return ok ? colorGreen : colorRed;
 }
 
 uint16_t wsPhaseColor() {
   if (wsReady || wsPhase == "online") {
-    return TFT_GREEN;
+    return colorGreen;
   }
   if (wsPhase == "conn" || wsPhase == "reconn" || wsPhase == "search") {
-    return TFT_YELLOW;
+    return colorYellow;
   }
-  return TFT_RED;
+  return colorRed;
 }
 
 uint16_t batteryColor(int percent) {
   if (percent <= 20) {
-    return TFT_RED;
+    return colorRed;
   }
   if (percent <= 45) {
-    return TFT_YELLOW;
+    return colorYellow;
   }
-  return TFT_GREEN;
+  return colorGreen;
 }
 
 String upperStatus(const String& status) {
@@ -224,10 +251,10 @@ String gpioMessage(uint8_t gpio, const char* label) {
 void drawChipColor(int x, int y, const char* label, uint16_t color) {
   const int width = 38;
   const int height = 15;
-  M5.Display.fillRect(x - 1, y - 1, width + 2, height + 2, TFT_DARKGREY);
+  M5.Display.fillRoundRect(x - 1, y - 1, width + 2, height + 2, 4, colorPanel);
   M5.Display.drawRoundRect(x, y, width, height, 4, color);
   M5.Display.fillCircle(x + 8, y + 7, 3, color);
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.drawString(label, x + 15, y + 4);
 }
 
@@ -250,32 +277,32 @@ void drawBattery(int x, int y, int percent) {
   const int bodyW = 20;
   const int bodyH = 12;
   const uint16_t color = batteryColor(percent);
-  M5.Display.fillRect(x - 2, y - 1, bodyW + 13, bodyH + 4, TFT_DARKGREY);
-  M5.Display.drawRect(x, y, bodyW, bodyH, TFT_WHITE);
-  M5.Display.fillRect(x + bodyW, y + 4, 2, 4, TFT_WHITE);
-  M5.Display.fillRect(x + 2, y + 2, bodyW - 4, bodyH - 4, TFT_BLACK);
+  M5.Display.fillRect(x - 2, y - 1, bodyW + 13, bodyH + 4, colorPanel);
+  M5.Display.drawRect(x, y, bodyW, bodyH, colorMuted);
+  M5.Display.fillRect(x + bodyW, y + 4, 2, 4, colorMuted);
+  M5.Display.fillRect(x + 2, y + 2, bodyW - 4, bodyH - 4, colorBg);
   const int fillW = ((bodyW - 4) * percent) / 100;
   if (fillW > 0) {
     M5.Display.fillRect(x + 2, y + 2, fillW, bodyH - 4, color);
   }
   M5.Display.setTextSize(1);
-  M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREY);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   M5.Display.drawString(String(percent), x + bodyW + 5, y + 2);
 }
 
 void drawStaticFrame() {
   const int width = M5.Display.width();
   const int height = M5.Display.height();
-  M5.Display.fillScreen(TFT_BLACK);
-  M5.Display.fillRect(0, 0, width, 23, TFT_DARKGREY);
-  M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREY);
-  M5.Display.setTextSize(1);
-  M5.Display.fillRect(0, height - 33, width, 33, TFT_DARKGREY);
+  M5.Display.fillScreen(colorBg);
+  M5.Display.fillRect(0, 0, width, 23, colorPanel);
+  M5.Display.drawFastHLine(0, 23, width, colorLine);
+  M5.Display.fillRect(0, height - 33, width, 33, colorPanel);
+  M5.Display.drawFastHLine(0, height - 33, width, colorLine);
   uiFrameDrawn = true;
 }
 
 void clearArea(int x, int y, int w, int h) {
-  M5.Display.fillRect(x, y, w, h, TFT_BLACK);
+  M5.Display.fillRect(x, y, w, h, colorBg);
 }
 
 void drawWrappedText(const String& text, int x, int y, int charsPerLine, int maxLines, uint16_t fg, uint16_t bg) {
@@ -300,55 +327,66 @@ void drawWrappedText(const String& text, int x, int y, int charsPerLine, int max
 
 void drawStatusCard(int width, const String& status, const String& chat, const String& source, uint16_t stateColor) {
   clearArea(7, 31, width - 14, 66);
+  M5.Display.fillRoundRect(7, 31, width - 14, 66, 6, colorPanel);
   M5.Display.drawRoundRect(7, 31, width - 14, 66, 6, stateColor);
   M5.Display.fillRect(9, 33, 4, 62, stateColor);
   if (source == "device-ui") {
     M5.Display.setTextSize(1);
-    M5.Display.setTextColor(stateColor, TFT_BLACK);
+    M5.Display.setTextColor(stateColor, colorPanel);
     M5.Display.drawString(upperStatus(status).substring(0, 12), 18, 39);
     M5.Display.setTextSize(2);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setTextColor(colorText, colorPanel);
     M5.Display.drawString(chat.substring(0, 9), 18, 57);
     return;
   }
 
   M5.Display.setTextSize(2);
-  M5.Display.setTextColor(stateColor, TFT_BLACK);
+  M5.Display.setTextColor(stateColor, colorPanel);
   M5.Display.drawString(upperStatus(status).substring(0, 8), 18, 45);
   M5.Display.setTextSize(1);
-  M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   M5.Display.drawString(String("chat  ") + chat.substring(0, 12), 18, 72);
   M5.Display.drawString(String("agent ") + source.substring(0, 12), 18, 84);
 }
 
 void drawInfoRows(int width, const String& ipText, const String& hubText, const String& message) {
   clearArea(7, 105, width - 14, 48);
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.fillRoundRect(7, 105, width - 14, 48, 4, colorPanel);
+  M5.Display.drawRoundRect(7, 105, width - 14, 48, 4, colorLine);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   M5.Display.drawString("IP", 7, 105);
+  M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.drawString(ipText.substring(0, 18), 29, 105);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   M5.Display.drawString("Hub", 7, 118);
+  M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.drawString(hubText.substring(0, 16), 29, 118);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   M5.Display.drawString("Msg", 7, 131);
+  M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.drawString(message.substring(0, 16), 29, 131);
 }
 
 void drawDeviceUiDetails(int width) {
   clearArea(7, 105, width - 14, 48);
   if (pendingUiId == deviceUiId && millis() < pendingActionUntil && pendingActionLabel.length() > 0) {
-    M5.Display.fillRoundRect(7, 105, width - 14, 48, 5, TFT_NAVY);
-    M5.Display.drawRoundRect(7, 105, width - 14, 48, 5, TFT_CYAN);
-    M5.Display.setTextColor(TFT_CYAN, TFT_NAVY);
+    M5.Display.fillRoundRect(7, 105, width - 14, 48, 5, colorPanel);
+    M5.Display.drawRoundRect(7, 105, width - 14, 48, 5, colorAccent);
+    M5.Display.setTextColor(colorAccent, colorPanel);
     M5.Display.drawString("SENT", 15, 113);
-    M5.Display.setTextColor(TFT_WHITE, TFT_NAVY);
+    M5.Display.setTextColor(colorText, colorPanel);
     M5.Display.drawString(pendingActionLabel.substring(0, 18), 15, 131);
     return;
   }
+
+  M5.Display.fillRoundRect(7, 105, width - 14, 48, 4, colorPanel);
+  M5.Display.drawRoundRect(7, 105, width - 14, 48, 4, colorLine);
 
   if (deviceUiMode == "menu" && deviceUiActionCount > 0) {
     M5.Display.setTextSize(1);
     int row = 0;
     if (deviceUiMessage.length() > 0) {
-      M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+      M5.Display.setTextColor(colorText, colorPanel);
       M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
       row = 1;
     }
@@ -361,7 +399,7 @@ void drawDeviceUiDetails(int width) {
     }
     for (int index = start; index < deviceUiActionCount && row < 4; ++index, ++row) {
       const bool selected = index == deviceUiSelected;
-      M5.Display.setTextColor(selected ? TFT_YELLOW : TFT_LIGHTGREY, TFT_BLACK);
+      M5.Display.setTextColor(selected ? colorYellow : colorMuted, colorPanel);
       M5.Display.drawString(
         String(selected ? "> " : "  ") + deviceUiActionLabels[index].substring(0, 14),
         7,
@@ -372,28 +410,28 @@ void drawDeviceUiDetails(int width) {
   }
 
   if (deviceUiFieldCount == 0 && deviceUiMessage.length() > 0) {
-    drawWrappedText(deviceUiMessage, 7, 106, 18, 3, TFT_WHITE, TFT_BLACK);
+    drawWrappedText(deviceUiMessage, 7, 106, 18, 3, colorText, colorPanel);
     return;
   }
 
   M5.Display.setTextSize(1);
   int row = 0;
   if (deviceUiMessage.length() > 0) {
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setTextColor(colorText, colorPanel);
     M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
     row = 1;
   }
   for (int index = 0; index < deviceUiFieldCount && row < 3; ++index, ++row) {
-    M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    M5.Display.setTextColor(colorMuted, colorPanel);
     M5.Display.drawString(deviceUiFieldLabels[index].substring(0, 7), 7, 106 + row * 13);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setTextColor(colorText, colorPanel);
     M5.Display.drawString(deviceUiFieldValues[index].substring(0, 18), 54, 106 + row * 13);
   }
   if (row > 0) {
     return;
   }
 
-  M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  M5.Display.setTextColor(colorMuted, colorPanel);
   for (int index = 0; index < deviceUiActionCount && index < 3; ++index) {
     M5.Display.drawString(
       deviceUiActionButtons[index].substring(0, 1) + String(" ") + deviceUiActionLabels[index].substring(0, 14),
@@ -433,9 +471,9 @@ String deviceUiDetailsSignature() {
 void drawToast(int width, const String& hit) {
   clearArea(7, 158, width - 14, 25);
   if (hit.length() > 0) {
-    M5.Display.fillRoundRect(7, 158, width - 14, 23, 5, TFT_NAVY);
-    M5.Display.drawRoundRect(7, 158, width - 14, 23, 5, TFT_CYAN);
-    M5.Display.setTextColor(TFT_WHITE, TFT_NAVY);
+    M5.Display.fillRoundRect(7, 158, width - 14, 23, 5, colorPanel);
+    M5.Display.drawRoundRect(7, 158, width - 14, 23, 5, colorAccent);
+    M5.Display.setTextColor(colorText, colorPanel);
     M5.Display.drawString(String("button ") + hit.substring(0, 10), 15, 166);
   }
 }
@@ -480,8 +518,9 @@ void drawFooter(int width) {
   if (footer == lastDrawnFooter) {
     return;
   }
-  M5.Display.fillRect(0, height - 33, width, 33, TFT_DARKGREY);
-  M5.Display.setTextColor(TFT_WHITE, TFT_DARKGREY);
+  M5.Display.fillRect(0, height - 33, width, 33, colorPanel);
+  M5.Display.drawFastHLine(0, height - 33, width, colorLine);
+  M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.setTextSize(1);
   int lineStart = 0;
   int y = height - 29;
@@ -1100,6 +1139,7 @@ void setup() {
   M5.begin(cfg);
   M5.Display.setRotation(0);
   M5.Display.setBrightness(100);
+  initTheme();
 #endif
 
   mark("vibe minimal boot");

@@ -12,14 +12,29 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
 <title>Vibe Remote</title>
 <style>
   :root {
-    --bg:#0e1116; --panel:#161b22; --line:#2a3340; --txt:#e6edf3; --muted:#9aa7b4;
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2330; --line:#2a3340; --txt:#e6edf3; --muted:#9aa7b4;
     --green:#3fb950; --red:#f85149; --yellow:#e3b341; --blue:#58a6ff; --purple:#bc8cff;
+    --radius:14px; --shadow:0 10px 24px -12px rgba(0,0,0,.6);
   }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Segoe UI","Yu Gothic UI",sans-serif; background:var(--bg); color:var(--txt); padding:16px; }
-  h2 { font-size:16px; margin:0 0 12px; }
-  .status { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-  .chip { font-size:12px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted); }
+  body {
+    margin:0; font-family:"Segoe UI","Yu Gothic UI",sans-serif; color:var(--txt); padding:18px;
+    background:radial-gradient(900px 460px at 78% -12%, #1b2740 0%, var(--bg) 55%);
+    min-height:100vh;
+  }
+  h2 {
+    font-size:15px; margin:0 0 14px; display:flex; align-items:center; gap:8px;
+    letter-spacing:.02em; color:var(--txt);
+  }
+  h2::before {
+    content:""; display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--blue); box-shadow:0 0 10px var(--blue);
+  }
+  .status { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .chip {
+    font-size:12px; padding:5px 12px; border:1px solid var(--line); border-radius:999px; color:var(--muted);
+    background:rgba(255,255,255,.03); backdrop-filter:blur(2px);
+  }
   .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; box-shadow:0 0 8px currentColor; background:var(--muted); color:var(--muted); }
   .dot.working { background:var(--blue); color:var(--blue); }
   .dot.maybeWaiting { background:var(--yellow); color:var(--yellow); animation:blink 1s infinite; }
@@ -27,8 +42,10 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
   .dot.on { background:var(--green); color:var(--green); }
   @keyframes blink { 50% { opacity:.25; } }
   .lcd {
-    background:#06090d; border:1px solid var(--line); border-radius:10px; padding:12px 14px;
-    font-family:"Cascadia Code","Consolas",monospace; font-size:13px; line-height:1.6; margin-bottom:16px; min-height:96px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px;
+    font-family:"Cascadia Code","Consolas",monospace; font-size:13px; line-height:1.65;
+    margin-bottom:16px; min-height:96px; box-shadow:var(--shadow);
   }
   .lcd .needed { color:var(--yellow); font-weight:700; }
   .lcd .ok { color:var(--green); }
@@ -36,15 +53,16 @@ export function getStatusViewerHtml(host: string, port: number, token: string): 
   .lcd .agent { color:var(--purple); font-weight:700; }
   .lcd .muted { color:var(--muted); }
   button {
-    border:2px solid var(--line); background:var(--panel); color:var(--txt);
+    border:1px solid var(--line); background:linear-gradient(180deg,var(--panel),var(--panel2)); color:var(--txt);
     border-radius:12px; padding:14px; font-size:15px; font-weight:700; cursor:pointer;
-    transition:transform .05s, background .15s;
+    transition:transform .05s, filter .15s, border-color .15s; box-shadow:var(--shadow);
   }
-  button:active { transform:scale(.96); }
+  button:hover { border-color:var(--blue); }
+  button:active { transform:scale(.96); filter:brightness(1.08); }
   button .sub { display:block; font-size:11px; font-weight:400; color:var(--muted); margin-top:3px; }
   .row { display:grid; grid-template-columns:1fr; gap:10px; margin-top:10px; }
   .decision-actions { display:grid; grid-template-columns:1fr; gap:8px; margin-top:12px; }
-  .decision-actions button { border-radius:8px; padding:10px 12px; font-size:13px; text-align:left; }
+  .decision-actions button { border-radius:8px; padding:10px 12px; font-size:13px; text-align:left; box-shadow:none; }
   .decision-actions button.selected { border-color:var(--yellow); color:var(--yellow); }
   .decision-actions button:disabled { opacity:.55; cursor:default; transform:none; }
   .small { padding:10px; font-size:13px; }
