@@ -151,6 +151,14 @@ uint16_t colorGreen = TFT_GREEN;
 uint16_t colorYellow = TFT_YELLOW;
 uint16_t colorRed = TFT_RED;
 
+constexpr int kCardX = 7;
+constexpr int kCardInsetX = 8;
+constexpr int kStatusY = 31;
+constexpr int kStatusH = 66;
+constexpr int kDetailY = 105;
+constexpr int kDetailH = 48;
+constexpr int kToastY = 158;
+
 void initTheme() {
 #if HAS_M5UNIFIED
   colorBg = M5.Display.color565(14, 17, 22);
@@ -305,6 +313,10 @@ void clearArea(int x, int y, int w, int h) {
   M5.Display.fillRect(x, y, w, h, colorBg);
 }
 
+void clearCardArea(int x, int y, int w, int h) {
+  clearArea(x - 1, y - 1, w + 2, h + 2);
+}
+
 void drawWrappedText(const String& text, int x, int y, int charsPerLine, int maxLines, uint16_t fg, uint16_t bg) {
   M5.Display.setTextColor(fg, bg);
   M5.Display.setTextSize(1);
@@ -326,68 +338,78 @@ void drawWrappedText(const String& text, int x, int y, int charsPerLine, int max
 }
 
 void drawStatusCard(int width, const String& status, const String& chat, const String& source, uint16_t stateColor) {
-  clearArea(7, 31, width - 14, 66);
-  M5.Display.fillRoundRect(7, 31, width - 14, 66, 6, colorPanel);
-  M5.Display.drawRoundRect(7, 31, width - 14, 66, 6, stateColor);
-  M5.Display.fillRect(9, 33, 4, 62, stateColor);
+  const int cardW = width - (kCardX * 2);
+  const int textX = kCardX + 11;
+  clearCardArea(kCardX, kStatusY, cardW, kStatusH);
+  M5.Display.fillRoundRect(kCardX, kStatusY, cardW, kStatusH, 6, colorPanel);
+  M5.Display.drawRoundRect(kCardX, kStatusY, cardW, kStatusH, 6, stateColor);
+  M5.Display.fillRect(kCardX + 2, kStatusY + 2, 4, kStatusH - 4, stateColor);
   if (source == "device-ui") {
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(stateColor, colorPanel);
-    M5.Display.drawString(upperStatus(status).substring(0, 12), 18, 39);
+    M5.Display.drawString(upperStatus(status).substring(0, 12), textX, kStatusY + 8);
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(colorText, colorPanel);
-    M5.Display.drawString(chat.substring(0, 9), 18, 57);
+    M5.Display.drawString(chat.substring(0, 9), textX, kStatusY + 26);
     return;
   }
 
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(stateColor, colorPanel);
-  M5.Display.drawString(upperStatus(status).substring(0, 8), 18, 45);
+  M5.Display.drawString(upperStatus(status).substring(0, 8), textX, kStatusY + 14);
   M5.Display.setTextSize(1);
   M5.Display.setTextColor(colorMuted, colorPanel);
-  M5.Display.drawString(String("chat  ") + chat.substring(0, 12), 18, 72);
-  M5.Display.drawString(String("agent ") + source.substring(0, 12), 18, 84);
+  M5.Display.drawString(String("chat  ") + chat.substring(0, 12), textX, kStatusY + 41);
+  M5.Display.drawString(String("agent ") + source.substring(0, 12), textX, kStatusY + 53);
 }
 
 void drawInfoRows(int width, const String& ipText, const String& hubText, const String& message) {
-  clearArea(7, 105, width - 14, 48);
-  M5.Display.fillRoundRect(7, 105, width - 14, 48, 4, colorPanel);
-  M5.Display.drawRoundRect(7, 105, width - 14, 48, 4, colorLine);
+  const int cardW = width - (kCardX * 2);
+  const int labelX = kCardX + kCardInsetX;
+  const int valueX = kCardX + 32;
+  const int rowY = kDetailY + 8;
+  clearCardArea(kCardX, kDetailY, cardW, kDetailH);
+  M5.Display.fillRoundRect(kCardX, kDetailY, cardW, kDetailH, 4, colorPanel);
+  M5.Display.drawRoundRect(kCardX, kDetailY, cardW, kDetailH, 4, colorLine);
   M5.Display.setTextColor(colorMuted, colorPanel);
-  M5.Display.drawString("IP", 7, 105);
+  M5.Display.drawString("IP", labelX, rowY);
   M5.Display.setTextColor(colorText, colorPanel);
-  M5.Display.drawString(ipText.substring(0, 18), 29, 105);
+  M5.Display.drawString(ipText.substring(0, 16), valueX, rowY);
   M5.Display.setTextColor(colorMuted, colorPanel);
-  M5.Display.drawString("Hub", 7, 118);
+  M5.Display.drawString("Hub", labelX, rowY + 13);
   M5.Display.setTextColor(colorText, colorPanel);
-  M5.Display.drawString(hubText.substring(0, 16), 29, 118);
+  M5.Display.drawString(hubText.substring(0, 15), valueX, rowY + 13);
   M5.Display.setTextColor(colorMuted, colorPanel);
-  M5.Display.drawString("Msg", 7, 131);
+  M5.Display.drawString("Msg", labelX, rowY + 26);
   M5.Display.setTextColor(colorText, colorPanel);
-  M5.Display.drawString(message.substring(0, 16), 29, 131);
+  M5.Display.drawString(message.substring(0, 15), valueX, rowY + 26);
 }
 
 void drawDeviceUiDetails(int width) {
-  clearArea(7, 105, width - 14, 48);
+  const int cardW = width - (kCardX * 2);
+  const int textX = kCardX + kCardInsetX;
+  const int valueX = kCardX + 50;
+  const int rowY = kDetailY + 8;
+  clearCardArea(kCardX, kDetailY, cardW, kDetailH);
   if (pendingUiId == deviceUiId && millis() < pendingActionUntil && pendingActionLabel.length() > 0) {
-    M5.Display.fillRoundRect(7, 105, width - 14, 48, 5, colorPanel);
-    M5.Display.drawRoundRect(7, 105, width - 14, 48, 5, colorAccent);
+    M5.Display.fillRoundRect(kCardX, kDetailY, cardW, kDetailH, 5, colorPanel);
+    M5.Display.drawRoundRect(kCardX, kDetailY, cardW, kDetailH, 5, colorAccent);
     M5.Display.setTextColor(colorAccent, colorPanel);
-    M5.Display.drawString("SENT", 15, 113);
+    M5.Display.drawString("SENT", textX, rowY);
     M5.Display.setTextColor(colorText, colorPanel);
-    M5.Display.drawString(pendingActionLabel.substring(0, 18), 15, 131);
+    M5.Display.drawString(pendingActionLabel.substring(0, 16), textX, rowY + 18);
     return;
   }
 
-  M5.Display.fillRoundRect(7, 105, width - 14, 48, 4, colorPanel);
-  M5.Display.drawRoundRect(7, 105, width - 14, 48, 4, colorLine);
+  M5.Display.fillRoundRect(kCardX, kDetailY, cardW, kDetailH, 4, colorPanel);
+  M5.Display.drawRoundRect(kCardX, kDetailY, cardW, kDetailH, 4, colorLine);
 
   if (deviceUiMode == "menu" && deviceUiActionCount > 0) {
     M5.Display.setTextSize(1);
     int row = 0;
     if (deviceUiMessage.length() > 0) {
       M5.Display.setTextColor(colorText, colorPanel);
-      M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
+      M5.Display.drawString(deviceUiMessage.substring(0, 16), textX, rowY);
       row = 1;
     }
     int start = 0;
@@ -401,16 +423,16 @@ void drawDeviceUiDetails(int width) {
       const bool selected = index == deviceUiSelected;
       M5.Display.setTextColor(selected ? colorYellow : colorMuted, colorPanel);
       M5.Display.drawString(
-        String(selected ? "> " : "  ") + deviceUiActionLabels[index].substring(0, 14),
-        7,
-        106 + row * 13
+        String(selected ? "> " : "  ") + deviceUiActionLabels[index].substring(0, 12),
+        textX,
+        rowY + row * 13
       );
     }
     return;
   }
 
   if (deviceUiFieldCount == 0 && deviceUiMessage.length() > 0) {
-    drawWrappedText(deviceUiMessage, 7, 106, 18, 3, colorText, colorPanel);
+    drawWrappedText(deviceUiMessage, textX, rowY, 16, 3, colorText, colorPanel);
     return;
   }
 
@@ -418,14 +440,14 @@ void drawDeviceUiDetails(int width) {
   int row = 0;
   if (deviceUiMessage.length() > 0) {
     M5.Display.setTextColor(colorText, colorPanel);
-    M5.Display.drawString(deviceUiMessage.substring(0, 18), 7, 106);
+    M5.Display.drawString(deviceUiMessage.substring(0, 16), textX, rowY);
     row = 1;
   }
   for (int index = 0; index < deviceUiFieldCount && row < 3; ++index, ++row) {
     M5.Display.setTextColor(colorMuted, colorPanel);
-    M5.Display.drawString(deviceUiFieldLabels[index].substring(0, 7), 7, 106 + row * 13);
+    M5.Display.drawString(deviceUiFieldLabels[index].substring(0, 6), textX, rowY + row * 13);
     M5.Display.setTextColor(colorText, colorPanel);
-    M5.Display.drawString(deviceUiFieldValues[index].substring(0, 18), 54, 106 + row * 13);
+    M5.Display.drawString(deviceUiFieldValues[index].substring(0, 12), valueX, rowY + row * 13);
   }
   if (row > 0) {
     return;
@@ -434,9 +456,9 @@ void drawDeviceUiDetails(int width) {
   M5.Display.setTextColor(colorMuted, colorPanel);
   for (int index = 0; index < deviceUiActionCount && index < 3; ++index) {
     M5.Display.drawString(
-      deviceUiActionButtons[index].substring(0, 1) + String(" ") + deviceUiActionLabels[index].substring(0, 14),
-      7,
-      106 + index * 13
+      deviceUiActionButtons[index].substring(0, 1) + String(" ") + deviceUiActionLabels[index].substring(0, 13),
+      textX,
+      rowY + index * 13
     );
   }
 }
@@ -469,12 +491,13 @@ String deviceUiDetailsSignature() {
 }
 
 void drawToast(int width, const String& hit) {
-  clearArea(7, 158, width - 14, 25);
+  const int cardW = width - (kCardX * 2);
+  clearCardArea(kCardX, kToastY, cardW, 25);
   if (hit.length() > 0) {
-    M5.Display.fillRoundRect(7, 158, width - 14, 23, 5, colorPanel);
-    M5.Display.drawRoundRect(7, 158, width - 14, 23, 5, colorAccent);
+    M5.Display.fillRoundRect(kCardX, kToastY, cardW, 23, 5, colorPanel);
+    M5.Display.drawRoundRect(kCardX, kToastY, cardW, 23, 5, colorAccent);
     M5.Display.setTextColor(colorText, colorPanel);
-    M5.Display.drawString(String("button ") + hit.substring(0, 10), 15, 166);
+    M5.Display.drawString(String("button ") + hit.substring(0, 10), kCardX + kCardInsetX, kToastY + 8);
   }
 }
 
@@ -523,15 +546,15 @@ void drawFooter(int width) {
   M5.Display.setTextColor(colorText, colorPanel);
   M5.Display.setTextSize(1);
   int lineStart = 0;
-  int y = height - 29;
+  int y = height - 30;
   while (lineStart < footer.length() && y <= height - 7) {
     int lineEnd = footer.indexOf('\n', lineStart);
     if (lineEnd < 0) {
       lineEnd = footer.length();
     }
-    M5.Display.drawString(footer.substring(lineStart, lineEnd).substring(0, 20), 7, y);
+    M5.Display.drawString(footer.substring(lineStart, lineEnd).substring(0, 19), 10, y);
     lineStart = lineEnd + 1;
-    y += 11;
+    y += 10;
   }
   lastDrawnFooter = footer;
 }
