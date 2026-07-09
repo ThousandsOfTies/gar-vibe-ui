@@ -2,13 +2,15 @@ PIO_ENV ?= m5stickc-plus2-vibe-min
 ARTIFACT_DIR ?=
 PORT ?=
 ARTIFACT_STAMP ?= .gar-artifact-$(PIO_ENV).stamp
-GAR_ROOT ?= ../../../GaplessAgentRuntime
 GAR_TOOLS_ROOT ?= ../../../gar-tools
-WOKWI_WORKSPACE ?= $(GAR_ROOT)/.gar/wokwi/m5stackc
+WOKWI_WORKSPACE ?= .gar/wokwi/m5stackc
 WOKWI_TEMPLATE ?= $(GAR_TOOLS_ROOT)/targets/esp32/wokwi/m5stackc
+WOKWI_PREPARE_SCRIPT ?= $(WOKWI_TEMPLATE)/scripts/prepare_workspace.py
+WOKWI_APP_CONFIG ?= $(CURDIR)/wokwi.ini
 WOKWI_STAMP = $(WOKWI_WORKSPACE)/.gar-generated
 WOKWI_WORKSPACE_ABS := $(abspath $(WOKWI_WORKSPACE))
 WOKWI_TEMPLATE_ABS := $(abspath $(WOKWI_TEMPLATE))
+WOKWI_APP_CONFIG_ABS := $(abspath $(WOKWI_APP_CONFIG))
 APP_SRC_ABS := $(abspath src)
 WOKWI_TEMPLATE_FILES := $(shell test -d "$(WOKWI_TEMPLATE)" && find "$(WOKWI_TEMPLATE)" -type f 2>/dev/null)
 APP_SRC_FILES := $(shell find src -maxdepth 2 -type f 2>/dev/null)
@@ -28,13 +30,14 @@ upload:
 monitor:
 	pio device monitor
 
-$(WOKWI_STAMP): $(WOKWI_TEMPLATE_FILES) $(APP_SRC_FILES) FORCE
-	@test -x "$(GAR_ROOT)/.venv/bin/python" || { echo "missing GAR python venv: $(GAR_ROOT)/.venv/bin/python"; echo "Run 'make init' in GaplessAgentRuntime."; exit 1; }
+$(WOKWI_STAMP): $(WOKWI_TEMPLATE_FILES) $(WOKWI_APP_CONFIG) $(APP_SRC_FILES) FORCE
 	@test -d "$(WOKWI_TEMPLATE)" || { echo "missing Wokwi template: $(WOKWI_TEMPLATE)"; exit 1; }
+	@test -f "$(WOKWI_PREPARE_SCRIPT)" || { echo "missing Wokwi workspace tool: $(WOKWI_PREPARE_SCRIPT)"; exit 1; }
 	GAR_WOKWI_PROJECT_DIR="$(WOKWI_WORKSPACE_ABS)" \
 	GAR_WOKWI_TEMPLATE_DIR="$(WOKWI_TEMPLATE_ABS)" \
-	GAR_VIBE_REMOTE_M5_SRC_DIR="$(APP_SRC_ABS)" \
-	cd "$(GAR_ROOT)" && .venv/bin/python "$(CURDIR)/scripts/prepare_wokwi_workspace.py"
+	GAR_WOKWI_APP_SRC_DIR="$(APP_SRC_ABS)" \
+	GAR_WOKWI_APP_CONFIG="$(WOKWI_APP_CONFIG_ABS)" \
+	python3 "$(WOKWI_PREPARE_SCRIPT)"
 	@touch "$@"
 
 wokwi-workspace: $(WOKWI_STAMP)
