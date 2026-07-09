@@ -8,13 +8,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
-from scripts.gar_lib._hw import load_hw_definition
-from scripts.gar_lib.environments.registry.simulation.wokwi import WokwiEnvironment
-from scripts.gar_lib.sim.wokwi import WokwiSimProvider
+from scripts.gar_lib.commands.hw import load_hw_definition
+from scripts.gar_lib.environments.registry.simulator.wokwi import WokwiEnvironment
+from scripts.gar_lib.simulation.wokwi import WokwiSimEnvProcessor
 
 
 def main() -> int:
-    provider = WokwiSimProvider(WokwiEnvironment, host=None)
+    provider = WokwiSimEnvProcessor(WokwiEnvironment, host=None)
     return provider.prepare_project(load_hw_definition())
 
 
